@@ -3,9 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hello from OpenAI Codex</title>
+    <title>Ivan Ilin — честно, кратко, без воды</title>
+    <meta name="description" content="Маркетинг, AI и личный опыт">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: #fff;
+            line-height: 1.6;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        h1, h2, h3 { font-weight: 400; margin-bottom: 20px; }
+        h1 { font-size: 2em; }
+        h2 { font-size: 1.5em; margin-top: 40px; }
+        h3 { font-size: 1.2em; margin-top: 30px; }
+        a { color: #fff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .nav { 
+            text-align: right; 
+            margin-bottom: 40px;
+            font-size: 0.9em;
+        }
+        .nav a { margin-left: 20px; }
+        .footer { 
+            text-align: center; 
+            margin-top: 80px;
+            padding-top: 40px;
+            border-top: 1px solid #333;
+            font-size: 0.85em;
+        }
+        .post { margin-bottom: 30px; }
+        .post-date { color: #666; font-size: 0.9em; }
+        .contact { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 15px; 
+            margin-top: 20px;
+        }
+        @media (max-width: 600px) {
+            body { padding: 20px 15px; }
+            h1 { font-size: 1.5em; }
+            .nav { text-align: center; margin-bottom: 30px; }
+            .nav a { display: block; margin: 10px 0; }
+        }
+    </style>
 </head>
 <body>
-    <h1>Hello from OpenAI Codex</h1>
+    <nav class="nav">
+        <a href="#about">Обо мне</a>
+        <a href="#blog">Блог</a>
+        <a href="#contact">Контакты</a>
+    </nav>
+
+    <h1>Ivan Ilin</h1>
+    <p>Маркетинг, AI и личный опыт. Честно, кратко, без воды.</p>
+
+    <section id="now">
+        <h2>Now</h2>
+        <p>Строю AI продукты и помогаю бизнесу с маркетингом. Пишу про то, что узнаю по пути.</p>
+    </section>
+
+    <section id="about">
+        <h2>About</h2>
+        <p>Маркетинговый консультант, предприниматель. Зафокусирован на практических результатах, а не на теории. Использую AI чтобы масштабировать идеи и сокращать время от мысли до результата.</p>
+    </section>
+
+    <section id="blog">
+        <h2>Blog</h2>
+        <div class="post">
+            <h3>Как AI меняет структуру агентных систем</h3>
+            <p class="post-date">30.04.2026</p>
+        </div>
+        <div class="post">
+            <h3>Почему клиенты не видят ценность маркетинга</h3>
+            <p class="post-date">25.04.2026</p>
+        </div>
+        <div class="post">
+            <h3>Whoop: стрейн, восстановление, сон</h3>
+            <p class="post-date">29.04.2026</p>
+        </div>
+    </section>
+
+    <section id="contact">
+        <h2>Контакты</h2>
+        <p>ivanilin.blog</p>
+        <div class="contact">
+            <a href="https://t.me/ivanilin_blog">Telegram</a>
+            <a href="https://github.com/VsevolodUstinov">GitHub</a>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <nav>
+            <a href="#">Блог</a>
+            <a href="#about">Обо мне</a>
+            <a href="#contact">Контакты</a>
+        </nav>
+    </footer>
 </body>
 </html>
