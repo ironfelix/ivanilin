@@ -871,10 +871,10 @@ const quietly = (fn) => { quiet = true; try { fn(); } finally { quiet = false; }
 
 /* ---------- тема ---------- */
 
-const mq = window.matchMedia('(prefers-color-scheme: light)');
+const mq = window.matchMedia('(prefers-color-scheme: dark)');
 function applyTheme() {
   const t = state.settings.theme;
-  const eff = t === 'auto' ? (mq.matches ? 'light' : 'dark') : t;
+  const eff = t === 'auto' ? (mq.matches ? 'dark' : 'light') : t;
   document.documentElement.setAttribute('data-theme', eff);
 }
 mq.addEventListener('change', applyTheme);

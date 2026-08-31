@@ -1,25 +1,35 @@
 <!DOCTYPE html>
-<html lang="ru" data-theme="dark">
+<html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="robots" content="noindex, nofollow">
-  <meta name="theme-color" content="#08090a" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f6f6f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#faf9f5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1f1e1d" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Пульт">
   <title>Пульт — GTD-админка</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23d4ff4f'/><text x='16' y='23' font-size='20' font-family='sans-serif' font-weight='bold' text-anchor='middle' fill='%2314170a'>И</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23d97757'/><text x='16' y='23' font-size='20' font-family='sans-serif' font-weight='bold' text-anchor='middle' fill='%23ffffff'>И</text></svg>">
   <link rel="stylesheet" href="./assets/app.css">
+
+  <script>
+    /* Ставим тему до первой отрисовки, иначе экран мигает. */
+    try {
+      var saved = (JSON.parse(localStorage.getItem('ivanilin.gtd.v1')) || {}).settings || {};
+      var t = saved.theme || 'auto';
+      document.documentElement.setAttribute('data-theme',
+        t === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : t);
+    } catch (e) {}
+  </script>
 </head>
 <body>
   <div id="root"></div>
   <noscript>
     <div style="padding:40px;max-width:520px;margin:0 auto">
       <h1>Пульт</h1>
-      <p style="color:#8c8d97;margin-top:12px">Админка работает на JavaScript — включите его в браузере.</p>
+      <p style="color:#6b6a65;margin-top:12px">Админка работает на JavaScript — включите его в браузере.</p>
     </div>
   </noscript>
   <script type="module" src="./assets/app.js"></script>
