@@ -32,7 +32,7 @@ const EMPTY = () => ({
   notes: [],
   topGoal: { ladder: 30, log: {} },          // log: { '2026-08-31': минуты }
   review: { lastAt: null, history: [] },
-  settings: { theme: 'auto', webhookUrl: '', webhookToken: '' },
+  settings: { theme: 'auto', webhookUrl: '', webhookToken: '', seoUrl: '/seo-status/' },
   outbox: [],                                 // журнал отправок в Make
   updatedAt: null,
 });

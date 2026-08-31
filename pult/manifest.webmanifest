@@ -6,12 +6,12 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#08090a",
-  "theme_color": "#08090a",
+  "background_color": "#f3f4f2",
+  "theme_color": "#f3f4f2",
   "lang": "ru",
   "icons": [
     {
-      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%23d4ff4f'/%3E%3Ctext x='256' y='360' font-size='300' font-family='sans-serif' font-weight='bold' text-anchor='middle' fill='%2314170a'%3E%D0%98%3C/text%3E%3C/svg%3E",
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='115' fill='%2316181a'/%3E%3Ctext x='256' y='355' font-size='290' font-family='sans-serif' font-weight='bold' text-anchor='middle' fill='%23f3f4f2'%3E%D0%98%3C/text%3E%3C/svg%3E",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

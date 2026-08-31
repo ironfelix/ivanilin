@@ -2,8 +2,8 @@
    офлайн — последняя удачно загруженная. Данные лежат в localStorage
    и через кэш не проходят. */
 
-const CACHE = 'pult-shell-v1';
-const SHELL = ['./', './index.html', './assets/app.css', './assets/app.js', './assets/store.js', './assets/parse.js', './manifest.webmanifest'];
+const CACHE = 'pult-shell-v2';
+const SHELL = ['./', './index.html', './assets/app.css', './assets/app.js', './assets/store.js', './assets/parse.js', './assets/markdown.js', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));

@@ -22,6 +22,7 @@ export function parseDate(word) {
   if (w === 'сегодня' || w === 'today') return shift(0);
   if (w === 'завтра' || w === 'tomorrow') return shift(1);
   if (w === 'послезавтра') return shift(2);
+  if (w === 'вчера') return shift(-1);
   if (/^\d{4}-\d{2}-\d{2}$/.test(w)) return w;
 
   const dm = w.match(/^(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{2,4}))?$/);
