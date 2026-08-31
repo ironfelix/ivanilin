@@ -81,7 +81,75 @@ function read() {
   }
 }
 
-export const state = read();
+/** Разовый перенос из предыдущего пульта, который жил на этом же адресе
+    и хранил данные под своими ключами. Выполняется один раз и только
+    когда собственных данных ещё нет — чужое ничего не затирает. */
+let legacyJustRan = false;
+
+function importLegacy(s) {
+  if (s.legacyImported) return s;
+  s.legacyImported = true;
+  legacyJustRan = true;
+  if (s.tasks.length || s.notes.length) return s;
+
+  const grab = (a, b) => {
+    for (const key of [a, b]) {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(key) || 'null');
+        if (Array.isArray(parsed) && parsed.length) return parsed;
+      } catch {}
+    }
+    return [];
+  };
+
+  const WHEN = { today: 'next', next: 'next', later: 'someday' };
+  const AREA = { high: 'высокий', medium: 'средний', low: 'низкий' };
+
+  for (const t of grab('ivan-pult-tasks-v2', 'ivan-pult-tasks-v1')) {
+    if (!t || !t.title) continue;
+    const notes = [t.details, t.area && `Область: ${t.area}`,
+                   t.priority === 'high' && `Приоритет: ${AREA.high}`]
+      .filter(Boolean).join('\n');
+    s.tasks.push({
+      id: uid(),
+      title: String(t.title),
+      note: notes,
+      list: t.done ? 'done' : (WHEN[t.when] || 'inbox'),
+      context: null,
+      projectId: null,
+      person: '',
+      due: t.when === 'today' && !t.done ? todayISO() : null,
+      minutes: null,
+      topGoal: false,
+      createdAt: t.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      doneAt: t.done ? new Date().toISOString() : null,
+    });
+  }
+
+  for (const n of grab('ivan-pult-notes-v2', 'ivan-pult-notes-v1')) {
+    const text = typeof n === 'string' ? n : (n && (n.text || n.body)) || '';
+    if (!text.trim()) continue;
+    const [first, ...rest] = text.split('\n');
+    s.notes.push({
+      id: uid(),
+      title: first.slice(0, 80),
+      person: '',
+      projectId: null,
+      date: (n && n.createdAt ? n.createdAt : new Date().toISOString()).slice(0, 10),
+      body: rest.length ? text : '',
+      createdAt: (n && n.createdAt) || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  return s;
+}
+
+export const state = importLegacy(read());
+
+// закрепляем факт переноса сразу: иначе при следующем открытии,
+// если человек ничего не менял, задачи импортировались бы повторно
+if (legacyJustRan) persist();
 
 const listeners = new Set();
 let saveTimer = null;
