@@ -13,7 +13,7 @@ import {
   todayISO, daysSince, plural,
 } from './store.js';
 import { parseQuickAdd, parseNoteLines } from './parse.js';
-import { toMarkdown, fromMarkdown, sameTask } from './markdown.js';
+import { toMarkdown, fromMarkdown, sameTask, renderMarkdown } from './markdown.js';
 
 /* ---------- утилиты ---------- */
 
@@ -105,8 +105,7 @@ const ui = {
   openNote: null,
   ctxFilter: 'all',
   timerTick: null,
-  mikeIndex: null,      // список конспектов Майка: null | 'loading' | [] | {error}
-  mikeNote: null,       // открытый конспект Майка: { file, text }
+  editNote: false,      // конспект открыт на правку, а не на чтение
 };
 
 /* ---------- каркас ---------- */
@@ -518,9 +517,24 @@ function viewNotes() {
     const n = state.notes.find((x) => x.id === ui.openNote);
     if (!n) { ui.openNote = null; return viewNotes(); }
     const found = parseNoteLines(n.body).length;
+
+    // конспект — это markdown-файл, поэтому по умолчанию его читают, а не правят
+    if (!ui.editNote) {
+      return `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+        <button class="btn btn-sm" data-action="close-note">← Все конспекты</button>
+        ${n.mdFile ? `<span class="chip" title="Файл у Майка">✎ ${esc(n.mdFile)}</span>` : ''}
+        <div style="flex:1"></div>
+        <button class="btn btn-sm" data-action="edit-note">Править</button>
+        <button class="btn btn-sm btn-primary" data-action="extract" data-id="${n.id}" ${found ? '' : 'disabled'}>
+          Извлечь действия${found ? ` (${found})` : ''}</button>
+      </div>
+      <article class="md">${renderMarkdown(n.body || '_Пусто._')}</article>`;
+    }
+
     return `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
-      <button class="btn btn-sm" data-action="close-note">← Все конспекты</button>
+      <button class="btn btn-sm" data-action="read-note">← Читать</button>
       <div style="flex:1"></div>
       <button class="btn btn-sm btn-ghost btn-danger" data-action="del-note" data-id="${n.id}">Удалить</button>
     </div>
@@ -548,16 +562,6 @@ function viewNotes() {
     </div>`;
   }
 
-  // конспект Майка открыт на чтение
-  if (ui.mikeNote) {
-    return `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
-      <button class="btn btn-sm" data-action="mike-close-note">← Все конспекты</button>
-      <span class="chip">из архива Майка · только чтение</span>
-    </div>
-    <div class="mdview">${esc(ui.mikeNote.text)}</div>`;
-  }
-
   return `
   <div class="section-head"><h2>Конспекты</h2><span class="count">${state.notes.length}</span><span class="spacer"></span>
     <button class="btn btn-sm btn-primary" data-action="new-note">+ Конспект</button></div>
@@ -571,30 +575,9 @@ function viewNotes() {
         ${n.projectId ? `<span class="chip">▦ ${esc(projectTitle(n.projectId))}</span>` : ''}
       </div>
     </button>`).join('')}</div>`
-    : `<div class="empty"><span class="empty-emoji">✎</span><p>Записывайте звонки сюда, а решения из них разбирайте в действия одной кнопкой.</p></div>`}
-  ${mikeNotesBlock()}`;
+    : `<div class="empty"><span class="empty-emoji">✎</span><p>Записывайте звонки сюда, а решения из них разбирайте в действия одной кнопкой.</p></div>`}`;
 }
 
-/** Архив конспектов Майка — читается с его сервера через мост. */
-function mikeNotesBlock() {
-  if (!mike()?.token.trim()) return '';
-  const list = ui.mikeIndex;
-  return `
-  <div class="section-head" style="margin-top:26px"><h2>Конспекты Майка</h2>
-    ${Array.isArray(list) ? `<span class="count">${list.length}</span>` : ''}<span class="spacer"></span>
-    <button class="btn btn-sm" data-action="mike-load-notes">${Array.isArray(list) ? 'Обновить' : 'Показать'}</button></div>
-  ${list === 'loading' ? '<p class="hint">Загружаю…</p>' : ''}
-  ${typeof list === 'object' && list?.error ? `<p class="hint" style="color:var(--danger)">${esc(list.error)}</p>` : ''}
-  ${Array.isArray(list) ? (list.length ? `<div class="cards">${list.map((k) => `
-    <button class="card" data-action="mike-open-note" data-file="${esc(k.file)}">
-      <h3>${esc(k.title)}</h3>
-      <div class="card-foot">
-        <span class="chip">${fmtDate(todayISO(new Date(k.mtime * 1000)))}</span>
-        <span class="chip">${(k.size / 1024).toFixed(1)} КБ</span>
-      </div>
-    </button>`).join('')}</div>` : '<p class="hint">У Майка пока пусто.</p>') : ''}
-  ${!list ? '<p class="hint">Живут на сервере Майка (konspekty/). Кнопка подтянет свежий список.</p>' : ''}`;
-}
 
 /* ---------- SEO-пайплайн ---------- */
 
@@ -643,8 +626,8 @@ function viewAgents() {
     <h3>Майк — главный агент <span class="agent-status">${dot}</span></h3>
     <p>Hermes-агент на этом же сервере, круглосуточно на связи в Telegram. Пульт говорит с ним напрямую — задачи, конспекты и поручения уходят ему, ответ приходит в журнал ниже.</p>
     <div class="field" style="margin-top:12px"><label>Токен моста</label>
-      <input type="password" data-edit="agent-token" data-id="mike" value="${esc(m.token)}"
-             placeholder="pult-… — лежит на сервере в /root/.hermes/pult-token.txt" autocomplete="off"></div>
+      <input class="secret" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-form-type="other" name="mike-bridge-token" data-edit="agent-token" data-id="mike"
+             value="${esc(m.token)}" placeholder="pult-… — лежит на сервере в /root/.hermes/pult-token.txt"></div>
     <div class="card-foot">
       <button class="btn btn-sm btn-primary" data-action="ping" data-id="mike">Проверить связь</button>
       <span class="hint">Потоки: задача → Майку · конспект → Майку · поручение · задачи из его TODO.md · его конспекты — в разделе «Конспекты»</span>
@@ -671,7 +654,8 @@ function viewAgents() {
           <input data-edit="agent-url" data-id="${a.id}" value="${esc(a.url)}" placeholder="https://…"></div>
       </div>
       <div class="field" style="margin-top:10px"><label>Токен (уйдёт в теле запроса)</label>
-        <input type="password" data-edit="agent-token" data-id="${a.id}" value="${esc(a.token)}" placeholder="необязательно" autocomplete="off"></div>
+        <input class="secret" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-form-type="other" name="agent-token-${a.id}" data-edit="agent-token" data-id="${a.id}"
+               value="${esc(a.token)}" placeholder="необязательно"></div>
       <div class="card-foot">
         <button class="btn btn-sm" data-action="ping" data-id="${a.id}">Проверить связь</button>
         <span class="spacer"></span>
@@ -1077,14 +1061,16 @@ const ACTIONS = {
   },
   'reset-review'() { ui.reviewChecked = new Set(); render(); },
 
-  'new-note'() { const n = addNote({ title: '' }); ui.openNote = n.id; render(); },
-  'open-note': (el) => { ui.openNote = el.dataset.id; render(); },
-  'close-note': () => { ui.openNote = null; render(); },
+  'new-note'() { const n = addNote({ title: '' }); ui.openNote = n.id; ui.editNote = true; render(); },
+  'open-note': (el) => { ui.openNote = el.dataset.id; ui.editNote = false; render(); },
+  'close-note': () => { ui.openNote = null; ui.editNote = false; render(); },
+  'edit-note': () => { ui.editNote = true; render(); },
+  'read-note': () => { ui.editNote = false; render(); },
   'del-note': (el) => {
     if (!confirm('Удалить конспект?')) return;
     commit((s) => { s.notes = s.notes.filter((n) => n.id !== el.dataset.id); });
     markDirty('notes', el.dataset.id);
-    ui.openNote = null; render();
+    ui.openNote = null; ui.editNote = false; render();
   },
   extract: (el) => {
     const n = state.notes.find((x) => x.id === el.dataset.id);
@@ -1145,22 +1131,6 @@ const ACTIONS = {
       ? `Конспект у Майка. Ответ: ${entry.response || 'ок'}`
       : 'Не ушло: ' + entry.response);
   },
-  async 'mike-load-notes'() {
-    ui.mikeIndex = 'loading'; render();
-    try {
-      ui.mikeIndex = JSON.parse(await mikeFetch('konspekty/index.json'));
-    } catch (e) {
-      ui.mikeIndex = { error: String(e.message || e) };
-    }
-    render();
-  },
-  async 'mike-open-note'(el) {
-    try {
-      ui.mikeNote = { file: el.dataset.file, text: await mikeFetch('konspekty/' + el.dataset.file) };
-      render();
-    } catch (e) { alert(String(e.message || e)); }
-  },
-  'mike-close-note': () => { ui.mikeNote = null; render(); },
   async 'mike-pull-todo'() {
     try {
       const parsed = fromMarkdown(await mikeFetch('TODO.md'))
@@ -1367,7 +1337,7 @@ function route() {
   if (r === 'bots') r = 'agents'; // старые закладки на «Боты и Make»
   ui.route = ROUTES.has(r) ? r : 'dashboard';
   ui.selected = null;
-  if (ui.route !== 'notes') { ui.openNote = null; ui.mikeNote = null; }
+  if (ui.route !== 'notes') { ui.openNote = null; ui.editNote = false; }
   render();
   window.scrollTo(0, 0);
   const m = $('.main'); if (m) m.scrollTop = 0;

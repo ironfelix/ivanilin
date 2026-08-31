@@ -21,6 +21,10 @@
 Свои же записи мост узнаёт по хешу и не принимает их обратно как чужие —
 иначе получилось бы эхо.
 
+Конспекты. Файлы konspekty/*.md и записи пульта — один пул: правка файла
+едет в базу, правка записи — обратно в файл. Направление выбирает хеш.
+Запись, заведённая в пульте, получает свой файл, чтобы Майк её тоже видел.
+
     systemd: pult-api.service, слушает 127.0.0.1:8901
     nginx:   location /pult/api/ → сюда (за тем же Bearer-токеном)
     база:    /var/lib/pult/pult.db
@@ -36,6 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 DB_PATH = os.environ.get("PULT_DB", "/var/lib/pult/pult.db")
 TODO_PATH = os.environ.get("PULT_TODO", "/root/.hermes/TODO.md")
+KONSPEKTY_DIR = os.environ.get("PULT_KONSPEKTY", "/root/.hermes/konspekty")
 PORT = int(os.environ.get("PULT_PORT", "8901"))
 
 # Раздел, куда дописываются задачи, заведённые в пульте.
@@ -48,7 +53,9 @@ COLLECTIONS = {
               "due", "minutes", "topGoal", "createdAt", "updatedAt", "doneAt", "prevList"],
     "projects": ["title", "outcome", "goalId", "status", "createdAt", "reviewedAt"],
     "goals": ["title", "horizon", "isTop", "createdAt"],
-    "notes": ["title", "person", "projectId", "date", "body", "createdAt", "updatedAt"],
+    # mdFile ездит в обе стороны только как метка происхождения: клиент
+    # возвращает её без изменений, файлами распоряжается сам сервис
+    "notes": ["title", "person", "projectId", "date", "body", "createdAt", "updatedAt", "mdFile"],
 }
 
 _lock = threading.RLock()
@@ -341,10 +348,127 @@ def sync_todo():
             db.close()
 
 
+# ---------- мост с konspekty/ ----------
+
+# Конспекты Майка — обычные .md файлы. Держим их и записи пульта одним
+# пулом: файл ↔ строка в notes. Направление правки выбираем по хешу:
+# изменился файл — принимаем его, изменилась запись — пишем в файл.
+
+DATE_RE = re.compile(r"(20\d\d)-(\d\d)-(\d\d)")
+
+
+def slugify(title, fallback):
+    s = re.sub(r"[^\w\s-]", "", (title or "").lower(), flags=re.U)
+    s = re.sub(r"[\s_]+", "-", s).strip("-")
+    return (s[:60] or fallback)
+
+
+def note_id_for(fname):
+    return "md" + hashlib.sha1(fname.encode()).hexdigest()[:12]
+
+
+def md_title(text, fallback):
+    for line in text.split("\n"):
+        m = re.match(r"#\s+(.+)", line.strip())
+        if m:
+            return m.group(1).strip()
+    return fallback
+
+
+def sync_notes():
+    """Один круг моста конспектов."""
+    with _lock:
+        db = connect()
+        try:
+            with db:
+                _sync_notes_inner(db)
+        except Exception as e:
+            print("sync_notes:", e, flush=True)
+        finally:
+            db.close()
+
+
+def _sync_notes_inner(db):
+    os.makedirs(KONSPEKTY_DIR, exist_ok=True)
+    now = time.strftime("%Y-%m-%dT%H:%M:%S")
+    rev = [None]
+
+    def need_rev():
+        if rev[0] is None:
+            rev[0] = bump_rev(db)
+        return rev[0]
+
+    rows = {r["md_file"]: r for r in db.execute(
+        "SELECT * FROM notes WHERE deleted=0 AND md_file IS NOT NULL")}
+
+    # 1) файлы → база
+    files = sorted(f for f in os.listdir(KONSPEKTY_DIR) if f.endswith(".md"))
+    for fname in files:
+        path = os.path.join(KONSPEKTY_DIR, fname)
+        try:
+            with open(path, encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except OSError:
+            continue
+        h = file_hash(text)
+        cur = rows.get(fname)
+        if cur is None:
+            d = DATE_RE.search(fname)
+            db.execute(
+                "INSERT OR IGNORE INTO notes (id, title, person, project_id, date, body,"
+                " created_at, updated_at, md_file, md_hash, rev, deleted)"
+                " VALUES (?,?,'',NULL,?,?,?,?,?,?,?,0)",
+                (note_id_for(fname), md_title(text, fname[:-3]),
+                 "-".join(d.groups()) if d else time.strftime("%Y-%m-%d"),
+                 text, now, now, fname, h, need_rev()))
+        elif cur["md_hash"] != h:
+            # файл изменили снаружи — версия из файла главнее
+            db.execute(
+                "UPDATE notes SET body=?, title=?, md_hash=?, updated_at=?, rev=? WHERE id=?",
+                (text, md_title(text, cur["title"] or fname[:-3]), h, now, need_rev(), cur["id"]))
+
+    # 2) база → файлы
+    for r in db.execute("SELECT * FROM notes WHERE deleted=0"):
+        body = r["body"] or ""
+        fname = r["md_file"]
+        if fname:
+            if file_hash(body) == (r["md_hash"] or ""):
+                continue                       # запись не менялась — писать нечего
+            path = os.path.join(KONSPEKTY_DIR, fname)
+        else:
+            # новая запись пульта: заводим файл, чтобы конспекты жили одним пулом
+            if not body.strip() and not (r["title"] or "").strip():
+                continue
+            date = (r["date"] or time.strftime("%Y-%m-%d"))[:10]
+            fname = f"{date}-{slugify(r['title'], r['id'])}.md"
+            path = os.path.join(KONSPEKTY_DIR, fname)
+            n = 2
+            while os.path.exists(path):
+                fname = f"{date}-{slugify(r['title'], r['id'])}-{n}.md"
+                path = os.path.join(KONSPEKTY_DIR, fname)
+                n += 1
+            if not body.lstrip().startswith("#") and (r["title"] or "").strip():
+                body = f"# {r['title']}\n\n{body}"
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(body)
+        os.replace(tmp, path)
+        # body возвращаем в базу: для новой записи мы дописали заголовок, и без
+        # этого следующий круг увидел бы расхождение и переписал файл обратно
+        db.execute("UPDATE notes SET md_file=?, md_hash=?, body=?, rev=? WHERE id=?",
+                   (fname, file_hash(body), body, need_rev(), r["id"]))
+
+    # 3) файл удалили у Майка — прячем запись, чтобы список не врал
+    for fname, r in rows.items():
+        if fname not in files and not os.path.exists(os.path.join(KONSPEKTY_DIR, fname)):
+            db.execute("UPDATE notes SET deleted=1, rev=? WHERE id=?", (need_rev(), r["id"]))
+
+
 def watcher():
     while True:
         time.sleep(20)
         sync_todo()
+        sync_notes()
 
 
 # ---------- HTTP ----------
@@ -390,7 +514,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             print("push:", e, flush=True)
             return self._send(500, {"error": str(e)})
-        threading.Thread(target=sync_todo, daemon=True).start()
+        threading.Thread(target=lambda: (sync_todo(), sync_notes()), daemon=True).start()
         self._send(200, res)
 
     def log_message(self, *a):
@@ -404,8 +528,14 @@ if __name__ == "__main__":
     if "md_key" not in [r[1] for r in db.execute("PRAGMA table_info(tasks)")]:
         with db:
             db.execute("ALTER TABLE tasks ADD COLUMN md_key TEXT")
+    have = [r[1] for r in db.execute("PRAGMA table_info(notes)")]
+    with db:
+        for c in ("md_file", "md_hash"):
+            if c not in have:
+                db.execute(f"ALTER TABLE notes ADD COLUMN {c} TEXT")
     db.close()
     sync_todo()
+    sync_notes()
     threading.Thread(target=watcher, daemon=True).start()
     print(f"pult-api на 127.0.0.1:{PORT}, база {DB_PATH}", flush=True)
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

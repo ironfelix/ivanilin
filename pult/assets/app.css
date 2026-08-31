@@ -505,13 +505,45 @@ a { color: inherit; }
 .dot.is-ok { background: var(--ok); }
 .dot.is-err { background: var(--danger); }
 
-/* конспект Майка — только чтение */
-.mdview {
-  white-space: pre-wrap; overflow-wrap: break-word;
-  font-size: 14px; line-height: 1.6; color: var(--text);
+/* чтение конспекта: это markdown-файл, показываем его как документ */
+.md {
+  display: block; max-width: 44rem;
+  font-size: 15px; line-height: 1.65; color: var(--text);
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); padding: 20px 22px;
+  border-radius: var(--radius); padding: 24px 26px;
+  overflow-wrap: break-word;
 }
+.md h2 { font-size: 21px; margin: 0 0 14px; line-height: 1.3; }
+.md h3 { font-size: 17px; margin: 26px 0 10px; }
+.md h4, .md h5, .md h6 { font-size: 15px; margin: 20px 0 8px; color: var(--muted); }
+.md p { margin: 0 0 12px; }
+.md ul, .md ol { margin: 0 0 12px; padding-left: 22px; }
+.md li { margin: 4px 0; }
+.md ul.md-tasks { list-style: none; padding-left: 2px; }
+.md ul.md-tasks li { display: flex; gap: 8px; align-items: baseline; }
+.md ul.md-tasks li.is-done { color: var(--muted); text-decoration: line-through; }
+.md .md-box {
+  flex: none; width: 15px; height: 15px; border: 1px solid var(--line);
+  border-radius: 4px; font-size: 11px; line-height: 14px; text-align: center;
+  color: var(--accent);
+}
+.md blockquote {
+  margin: 0 0 12px; padding: 2px 0 2px 14px;
+  border-left: 3px solid var(--line); color: var(--muted);
+}
+.md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em;
+  background: var(--surface-2, rgba(128,128,128,.12)); padding: 1px 5px; border-radius: 4px;
+}
+.md pre {
+  background: var(--surface-2, rgba(128,128,128,.12)); padding: 14px 16px;
+  border-radius: var(--radius-sm); overflow-x: auto; font-size: 13px; margin: 0 0 12px;
+}
+.md pre code { background: none; padding: 0; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 20px 0; }
+.md a { color: var(--accent); }
+.md del { color: var(--muted); }
+.md > :last-child { margin-bottom: 0; }
 
 /* состояние базы в шапке */
 .syncchip {
@@ -529,3 +561,9 @@ a { color: inherit; }
   .syncchip { padding: 4px 7px; font-size: 0; gap: 0; }
   .syncchip .dot { margin-right: 0; }
 }
+
+/* Поля секретов. Не type=password: менеджеры паролей автозаполняют такие поля
+   и молча подменяют токен сохранённым паролем (ловили на Safari). Маскируем
+   средствами CSS, поле при этом остаётся обычным текстовым. */
+.field input.secret { -webkit-text-security: disc; text-security: disc; }
+.field input.secret:focus { -webkit-text-security: none; text-security: none; }

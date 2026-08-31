@@ -111,3 +111,89 @@ export function fromMarkdown(text) {
     повторный импорт того же файла не плодил дубли. */
 export const sameTask = (a, title) =>
   a.title.trim().toLowerCase() === title.trim().toLowerCase();
+
+/* ---------- показ конспекта ---------- */
+
+/**
+ * Маленький рендерер Markdown для чтения конспектов. Своя реализация, а не
+ * библиотека: страница грузится без сборки, тянуть внешний скрипт ради
+ * заголовков и списков незачем.
+ *
+ * Экранируем ДО разбора разметки — иначе `<script>` из чужого файла попал бы
+ * в документ как тег. Всё, что рендерер потом вставляет, — его собственные теги.
+ */
+const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function inline(s) {
+  return s
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+    .replace(/~~([^~]+)~~/g, '<del>$1</del>')
+    // ссылки: только http(s) и внутренние — javascript: в href не пропускаем
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+}
+
+export function renderMarkdown(text) {
+  const out = [];
+  let list = null;      // 'ul' | 'ol'
+  let code = false;
+
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+
+  for (const raw of escHtml(text).split('\n')) {
+    const line = raw.replace(/\s+$/, '');
+
+    if (/^```/.test(line.trim())) {
+      closeList();
+      out.push(code ? '</pre>' : '<pre>');
+      code = !code;
+      continue;
+    }
+    if (code) { out.push(line); continue; }
+
+    if (!line.trim()) { closeList(); continue; }
+
+    const h = line.match(/^(#{1,6})\s+(.+)$/);
+    if (h) {
+      closeList();
+      const lvl = Math.min(6, h[1].length + 1);   // # в файле — это h2 на странице
+      out.push(`<h${lvl}>${inline(h[2])}</h${lvl}>`);
+      continue;
+    }
+    if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) { closeList(); out.push('<hr>'); continue; }
+    if (/^&gt;\s?/.test(line)) {
+      closeList();
+      out.push(`<blockquote>${inline(line.replace(/^&gt;\s?/, ''))}</blockquote>`);
+      continue;
+    }
+
+    const task = line.match(/^\s*[-*+]\s+\[([ xX])\]\s+(.+)$/);
+    if (task) {
+      if (list !== 'ul') { closeList(); out.push('<ul class="md-tasks">'); list = 'ul'; }
+      const done = task[1].toLowerCase() === 'x';
+      out.push(`<li class="${done ? 'is-done' : ''}"><span class="md-box">${done ? '✓' : ''}</span>${inline(task[2])}</li>`);
+      continue;
+    }
+    const li = line.match(/^\s*[-*+]\s+(.+)$/);
+    if (li) {
+      if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; }
+      out.push(`<li>${inline(li[1])}</li>`);
+      continue;
+    }
+    const oli = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (oli) {
+      if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; }
+      out.push(`<li>${inline(oli[1])}</li>`);
+      continue;
+    }
+
+    closeList();
+    out.push(`<p>${inline(line)}</p>`);
+  }
+  closeList();
+  if (code) out.push('</pre>');
+  return out.join('\n');
+}
