@@ -831,7 +831,7 @@ function viewSettings() {
   <div class="card" style="margin-bottom:16px">
     <h3>Оформление</h3>
     <div class="card-foot">
-      ${[['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([t, label]) =>
+      ${[['auto', 'Как в системе'], ['dark', 'Тёмная'], ['light', 'Светлая']].map(([t, label]) =>
         `<button class="btn btn-sm ${state.settings.theme === t ? 'btn-primary' : ''}" data-action="set-theme" data-theme="${t}">${label}</button>`).join('')}
     </div>
   </div>
@@ -932,10 +932,10 @@ const quietly = (fn) => { quiet = true; try { fn(); } finally { quiet = false; }
 
 /* ---------- тема ---------- */
 
-const mq = window.matchMedia('(prefers-color-scheme: dark)');
+const mq = window.matchMedia('(prefers-color-scheme: light)');
 function applyTheme() {
   const t = state.settings.theme || 'auto';
-  document.documentElement.setAttribute('data-theme', t === 'auto' ? (mq.matches ? 'dark' : 'light') : t);
+  document.documentElement.setAttribute('data-theme', t === 'auto' ? (mq.matches ? 'light' : 'dark') : t);
 }
 mq.addEventListener('change', applyTheme);
 
@@ -1099,7 +1099,7 @@ const ACTIONS = {
   },
 
   theme() {
-    const order = ['auto', 'light', 'dark'];
+    const order = ['auto', 'dark', 'light'];
     commit((s) => { s.settings.theme = order[(order.indexOf(s.settings.theme || 'auto') + 1) % 3]; });
     applyTheme();
   },
