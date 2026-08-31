@@ -6,15 +6,18 @@
   <title>Пульт Ивана</title>
   <style>
     :root {
-      --bg: #f6f3ee;
-      --card: #fffdf9;
-      --text: #181715;
-      --muted: #77716a;
-      --line: #e4ded5;
-      --accent: #1f6feb;
-      --green: #177245;
+      --bg: #f7f5f0;
+      --card: #fffefb;
+      --text: #1a1917;
+      --muted: #7a746c;
+      --line: #e6e0d5;
+      --accent: #2f6fed;
+      --accent-soft: #eaf0fe;
       --red: #b3261e;
-      --shadow: 0 16px 45px rgba(36, 30, 20, .08);
+      --red-soft: #fbeae8;
+      --green: #17724a;
+      --green-soft: #e8f4ee;
+      --shadow: 0 14px 40px rgba(40, 32, 20, .07);
     }
 
     * { box-sizing: border-box; }
@@ -25,99 +28,107 @@
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
     }
 
     a { color: inherit; }
 
     .shell {
-      width: min(1120px, 100%);
+      width: min(1080px, 100%);
       margin: 0 auto;
-      padding: 18px;
+      padding: 16px;
     }
 
     header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 16px;
-      padding: 18px 2px 22px;
+      padding: 14px 4px 18px;
     }
 
     h1 {
-      margin: 0 0 4px;
-      font-size: clamp(30px, 6vw, 56px);
+      margin: 0 0 2px;
+      font-size: clamp(30px, 8vw, 46px);
       line-height: .95;
-      letter-spacing: -.05em;
+      letter-spacing: -.04em;
     }
 
     .sub {
-      margin: 0;
+      margin: 6px 0 0;
       color: var(--muted);
-      font-size: 15px;
+      font-size: 14px;
     }
 
     .date {
-      min-width: 112px;
-      text-align: right;
+      margin-top: 8px;
       color: var(--muted);
-      font-size: 14px;
-      padding-top: 6px;
+      font-size: 13px;
+      text-transform: capitalize;
     }
 
     nav {
       position: sticky;
       top: 0;
-      z-index: 2;
+      z-index: 3;
       display: flex;
       gap: 8px;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       padding: 10px 0 16px;
-      background: linear-gradient(var(--bg) 75%, rgba(246, 243, 238, 0));
+      margin: 0 -16px;
+      padding-left: 16px;
+      padding-right: 16px;
+      background: linear-gradient(var(--bg) 78%, rgba(247, 245, 240, 0));
+      scrollbar-width: none;
     }
+
+    nav::-webkit-scrollbar { display: none; }
 
     nav a {
       flex: 0 0 auto;
       text-decoration: none;
-      padding: 9px 12px;
+      display: flex;
+      align-items: center;
+      padding: 11px 16px;
+      min-height: 40px;
       border: 1px solid var(--line);
       border-radius: 999px;
-      background: rgba(255, 253, 249, .72);
+      background: rgba(255, 254, 251, .8);
       color: #33302c;
       font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
     }
 
-    nav a.primary {
-      background: var(--text);
-      color: white;
-      border-color: var(--text);
-    }
-
-    .grid {
+    main {
       display: grid;
-      grid-template-columns: 1.15fr .85fr;
+      grid-template-columns: 1fr;
       gap: 14px;
       align-items: start;
     }
 
+    .col { display: grid; gap: 14px; }
+
     .card {
       background: var(--card);
       border: 1px solid var(--line);
-      border-radius: 24px;
+      border-radius: 22px;
       padding: 18px;
       box-shadow: var(--shadow);
     }
 
-    .card + .card { margin-top: 14px; }
-
     h2 {
-      margin: 0 0 14px;
-      font-size: 20px;
+      margin: 0 0 4px;
+      font-size: 19px;
       letter-spacing: -.02em;
+    }
+
+    .card-hint {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 13px;
     }
 
     label {
       display: block;
-      margin: 12px 0 6px;
+      margin: 14px 0 6px;
       color: var(--muted);
       font-size: 13px;
     }
@@ -132,18 +143,29 @@
       border: 1px solid var(--line);
       background: #fff;
       color: var(--text);
-      padding: 12px 13px;
+      padding: 13px 14px;
+      min-height: 46px;
       outline: none;
+      -webkit-appearance: none;
+      appearance: none;
     }
 
-    textarea { min-height: 96px; resize: vertical; }
+    select {
+      background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+      background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
+      padding-right: 34px;
+    }
+
+    textarea { min-height: 88px; resize: vertical; }
 
     input:focus, textarea:focus, select:focus {
-      border-color: rgba(31, 111, 235, .55);
-      box-shadow: 0 0 0 4px rgba(31, 111, 235, .09);
+      border-color: rgba(47, 111, 237, .55);
+      box-shadow: 0 0 0 4px rgba(47, 111, 237, .1);
     }
 
-    .row {
+    .row2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
@@ -153,76 +175,142 @@
       border: 0;
       background: var(--text);
       color: white;
-      padding: 12px 14px;
+      padding: 13px 14px;
+      min-height: 48px;
       cursor: pointer;
-      margin-top: 12px;
+      margin-top: 16px;
+      font-weight: 600;
     }
 
+    button:active { opacity: .85; }
+
     button.secondary {
-      background: #ebe5dc;
+      background: #efe9de;
       color: var(--text);
     }
 
     .hint {
       color: var(--muted);
-      font-size: 13px;
-      margin: 8px 0 0;
+      font-size: 12.5px;
+      margin: 10px 0 0;
     }
 
-    .list {
-      display: grid;
-      gap: 9px;
+    /* GTD */
+    .gtd-group + .gtd-group { margin-top: 18px; }
+
+    .gtd-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
     }
 
-    .item {
+    .gtd-head h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 650;
+    }
+
+    .count {
+      background: #f0ece2;
+      color: var(--muted);
+      font-size: 12px;
+      border-radius: 999px;
+      padding: 2px 9px;
+      min-width: 22px;
+      text-align: center;
+    }
+
+    .task-list { display: grid; gap: 8px; }
+
+    .task {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
       border: 1px solid var(--line);
       border-radius: 16px;
-      padding: 12px;
+      padding: 11px;
       background: #fff;
     }
 
-    .item-head {
+    .check {
+      flex: 0 0 auto;
+      width: 30px;
+      height: 30px;
+      min-height: 30px;
+      margin: 0;
+      padding: 0;
+      border-radius: 50%;
+      border: 1.5px solid var(--line);
+      background: #fff;
+      color: transparent;
+      font-size: 15px;
+      line-height: 1;
       display: flex;
-      justify-content: space-between;
-      gap: 10px;
-      align-items: flex-start;
+      align-items: center;
+      justify-content: center;
     }
 
-    .item-title {
-      font-weight: 650;
+    .check:hover, .check:active {
+      border-color: var(--green);
+      color: var(--green);
+      background: var(--green-soft);
+    }
+
+    .task-body { flex: 1; min-width: 0; }
+
+    .task-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .task-title {
+      font-weight: 600;
       word-break: break-word;
     }
 
-    .meta {
-      margin-top: 5px;
+    .task-meta {
+      margin-top: 4px;
       color: var(--muted);
-      font-size: 13px;
+      font-size: 12.5px;
+      word-break: break-word;
+    }
+
+    .task-done {
+      margin-top: 4px;
+      font-size: 12.5px;
+      color: var(--green);
     }
 
     .tag {
-      display: inline-block;
-      padding: 4px 8px;
+      display: inline-flex;
+      align-items: center;
+      flex: 0 0 auto;
+      padding: 3px 9px;
       border-radius: 999px;
-      background: #f0ece5;
+      background: #f0ece2;
       color: #4a443d;
-      font-size: 12px;
+      font-size: 11.5px;
       white-space: nowrap;
     }
 
-    .delete {
-      width: auto;
-      margin: 0;
-      padding: 5px 8px;
-      background: transparent;
+    .tag-high { background: var(--red-soft); color: var(--red); }
+    .tag-medium { background: var(--accent-soft); color: var(--accent); }
+    .tag-low { background: #f0ece2; color: var(--muted); }
+
+    .empty {
       color: var(--muted);
-      border: 1px solid var(--line);
-      font-size: 12px;
+      font-size: 13px;
+      padding: 6px 2px;
     }
 
+    /* Goals */
     .goal {
       display: flex;
       gap: 10px;
-      align-items: center;
+      align-items: flex-start;
       padding: 10px 0;
       border-bottom: 1px solid var(--line);
     }
@@ -230,116 +318,176 @@
     .goal:last-child { border-bottom: 0; }
 
     .dot {
-      width: 10px;
-      height: 10px;
+      width: 9px;
+      height: 9px;
+      margin-top: 6px;
       border-radius: 50%;
       background: var(--accent);
       flex: 0 0 auto;
     }
 
-    .quick-links {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 9px;
+    /* Notes */
+    .note-list { display: grid; gap: 8px; margin-top: 12px; }
+
+    .note {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      justify-content: space-between;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #fffdf6;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      font-size: 14px;
     }
+
+    .note time {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 11.5px;
+      white-space: nowrap;
+      margin-top: 1px;
+    }
+
+    .note-del {
+      width: auto;
+      min-height: 28px;
+      margin: 0;
+      padding: 4px 9px;
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      font-size: 12px;
+      font-weight: 400;
+      flex: 0 0 auto;
+    }
+
+    /* Quick links */
+    .quick-links { display: grid; gap: 9px; }
 
     .quick-links a {
       display: flex;
       justify-content: space-between;
+      align-items: center;
       gap: 12px;
       text-decoration: none;
-      padding: 13px;
+      padding: 14px;
+      min-height: 48px;
       border: 1px solid var(--line);
       border-radius: 16px;
       background: #fff;
+      font-weight: 500;
     }
 
-    .quick-links span { color: var(--muted); }
-
-    .note {
-      white-space: pre-wrap;
-      word-break: break-word;
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 12px;
-      min-height: 80px;
-    }
+    .quick-links span { color: var(--muted); font-weight: 400; font-size: 13px; }
 
     footer {
       color: var(--muted);
-      font-size: 13px;
-      padding: 26px 2px 8px;
+      font-size: 12.5px;
+      padding: 24px 4px 8px;
     }
 
-    @media (max-width: 820px) {
-      .shell { padding: 14px; }
-      header { display: block; }
-      .date { text-align: left; margin-top: 10px; }
-      .grid { grid-template-columns: 1fr; }
-      .row { grid-template-columns: 1fr; }
-      .card { border-radius: 20px; padding: 15px; }
-      nav { margin-left: -14px; margin-right: -14px; padding-left: 14px; padding-right: 14px; }
+    @media (min-width: 900px) {
+      .shell { padding: 26px; }
+      header { padding-top: 6px; }
+      nav { margin: 0 0 4px; padding: 10px 0 16px; }
+      main { grid-template-columns: 1.2fr .8fr; gap: 16px; }
     }
   </style>
 </head>
 <body>
   <div class="shell">
     <header>
-      <div>
-        <h1>Пульт</h1>
-        <p class="sub">Задачи, цели, заметки. Без героизма, просто ясно.</p>
-      </div>
+      <h1>Пульт</h1>
+      <p class="sub">Задачи, цели, заметки. Без героизма, просто ясно.</p>
       <div class="date" id="today"></div>
     </header>
 
     <nav aria-label="Разделы">
-      <a class="primary" href="#task">+ задача</a>
       <a href="#gtd">GTD</a>
       <a href="#goals">Top Goals</a>
       <a href="#notes">Заметки</a>
       <a href="/seo-status/" target="_blank" rel="noopener">SEO-пайплайн ↗</a>
     </nav>
 
-    <main class="grid">
-      <section class="card" id="task">
-        <h2>Новая задача</h2>
-        <form id="taskForm">
-          <label for="title">Что сделать</label>
-          <input id="title" name="title" placeholder="Например: описать требования к маркетологу" required />
+    <main>
+      <div class="col">
+        <section class="card" id="inbox">
+          <h2>Инбокс</h2>
+          <p class="card-hint">Быстрый ввод задачи. Заполни, что важно, остальное можно пропустить.</p>
+          <form id="taskForm">
+            <label for="title">Что сделать</label>
+            <input id="title" name="title" placeholder="Например: описать требования к маркетологу" required />
 
-          <div class="row">
-            <div>
-              <label for="area">Область</label>
-              <select id="area" name="area">
-                <option>Работа</option>
-                <option>Личное</option>
-                <option>CRM Group</option>
-                <option>AgentIQ</option>
-                <option>SEO</option>
-                <option>Зерно</option>
-              </select>
+            <div class="row2">
+              <div>
+                <label for="area">Область</label>
+                <select id="area" name="area">
+                  <option>Работа</option>
+                  <option>Личное</option>
+                  <option>CRM Group</option>
+                  <option>AgentIQ</option>
+                  <option>SEO</option>
+                  <option>Зерно</option>
+                </select>
+              </div>
+              <div>
+                <label for="when">Когда</label>
+                <select id="when" name="when">
+                  <option value="today">Сегодня</option>
+                  <option value="next" selected>Скоро</option>
+                  <option value="later">Когда-нибудь</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label for="when">Когда</label>
-              <select id="when" name="when">
-                <option>Сегодня</option>
-                <option selected>Завтра</option>
-                <option>На неделе</option>
-                <option>Когда будет ресурс</option>
-              </select>
+
+            <div class="row2">
+              <div>
+                <label for="priority">Приоритет</label>
+                <select id="priority" name="priority">
+                  <option value="high">Высокий</option>
+                  <option value="medium" selected>Средний</option>
+                  <option value="low">Низкий</option>
+                </select>
+              </div>
+              <div>
+                <label for="done">Критерий готовности</label>
+                <input id="done" name="done" placeholder="Когда считать закрытым" />
+              </div>
             </div>
+
+            <label for="details">Контекст / детали</label>
+            <textarea id="details" name="details" placeholder="Ссылка, вводные, кто в курсе"></textarea>
+
+            <button type="submit">Добавить в GTD</button>
+            <p class="hint">Хранится в этом браузере. Бэкенда пока нет.</p>
+          </form>
+        </section>
+
+        <section class="card" id="gtd">
+          <h2>GTD</h2>
+          <p class="card-hint">Сегодня → Скоро → Когда-нибудь. Готово — жми кружок.</p>
+
+          <div class="gtd-group">
+            <div class="gtd-head"><h3>Сегодня</h3><span class="count" id="count-today">0</span></div>
+            <div class="task-list" id="list-today"></div>
           </div>
 
-          <label for="details">Детали</label>
-          <textarea id="details" name="details" placeholder="Контекст, ссылка, критерий готовности"></textarea>
+          <div class="gtd-group">
+            <div class="gtd-head"><h3>Скоро</h3><span class="count" id="count-next">0</span></div>
+            <div class="task-list" id="list-next"></div>
+          </div>
 
-          <button type="submit">Сохранить в пульт</button>
-          <p class="hint">Пока сохраняется в браузере. Следующий шаг: связать с Майком и файлом задач.</p>
-        </form>
-      </section>
+          <div class="gtd-group">
+            <div class="gtd-head"><h3>Когда-нибудь</h3><span class="count" id="count-later">0</span></div>
+            <div class="task-list" id="list-later"></div>
+          </div>
+        </section>
+      </div>
 
-      <aside>
+      <div class="col">
         <section class="card" id="goals">
           <h2>Top Goals</h2>
           <div class="goal"><span class="dot"></span><div>Ясный CEO-ритм: цели, роли, деньги</div></div>
@@ -347,81 +495,118 @@
           <div class="goal"><span class="dot"></span><div>Личный бренд как журнал сборки</div></div>
         </section>
 
-        <section class="card">
-          <h2>Меню</h2>
+        <section class="card" id="notes">
+          <h2>Заметки</h2>
+          <p class="card-hint">Мысль, которую жалко потерять.</p>
+          <textarea id="notesInput" placeholder="Коротко, без обязательств оформлять красиво"></textarea>
+          <button class="secondary" id="saveNote" type="button">Добавить заметку</button>
+          <div class="note-list" id="noteList"></div>
+        </section>
+
+        <section class="card" id="links">
+          <h2>Quick Links</h2>
           <div class="quick-links">
-            <a href="#gtd"><strong>GTD</strong><span>задачи</span></a>
+            <a href="/seo-status/" target="_blank" rel="noopener"><strong>SEO-пайплайн</strong><span>отдельно ↗</span></a>
+            <a href="#gtd"><strong>GTD</strong><span>все задачи</span></a>
             <a href="#goals"><strong>Top Goals</strong><span>фокус</span></a>
             <a href="#notes"><strong>Заметки</strong><span>мысли</span></a>
-            <a href="/seo-status/" target="_blank" rel="noopener"><strong>SEO-пайплайн</strong><span>отдельно ↗</span></a>
           </div>
         </section>
-      </aside>
-
-      <section class="card" id="gtd">
-        <h2>GTD</h2>
-        <div class="list" id="taskList"></div>
-      </section>
-
-      <section class="card" id="notes">
-        <h2>Заметки</h2>
-        <textarea id="notesInput" placeholder="Быстрая заметка. Позже это будет уходить Майку."></textarea>
-        <button class="secondary" id="saveNote" type="button">Сохранить заметку</button>
-        <div class="note" id="noteBox" style="margin-top:12px"></div>
-      </section>
+      </div>
     </main>
 
     <footer>
-      ivanilin.ru/pult. Личный админ-пульт. Версия 0.1.
+      ivanilin.ru/pult · личный админ-пульт
     </footer>
   </div>
 
   <script>
     const $ = (id) => document.getElementById(id);
-    const storageKey = 'ivan-pult-tasks-v1';
-    const notesKey = 'ivan-pult-notes-v1';
+    const TASKS_KEY = 'ivan-pult-tasks-v2';
+    const NOTES_KEY = 'ivan-pult-notes-v2';
+    const PRIORITY_WEIGHT = { high: 3, medium: 2, low: 1 };
+    const PRIORITY_LABEL = { high: 'Высокий', medium: 'Средний', low: 'Низкий' };
+    const WHEN_LABEL = { today: 'Сегодня', next: 'Скоро', later: 'Когда-нибудь' };
 
     $('today').textContent = new Date().toLocaleDateString('ru-RU', {
       weekday: 'long', day: 'numeric', month: 'long'
     });
 
+    function migrateOldData() {
+      if (!localStorage.getItem(TASKS_KEY) && localStorage.getItem('ivan-pult-tasks-v1')) {
+        try {
+          const old = JSON.parse(localStorage.getItem('ivan-pult-tasks-v1')) || [];
+          const whenMap = { 'Сегодня': 'today', 'Завтра': 'next', 'На неделе': 'next', 'Когда будет ресурс': 'later' };
+          const migrated = old.map((t) => ({
+            id: makeId(),
+            title: t.title || '',
+            area: t.area || 'Личное',
+            when: whenMap[t.when] || 'next',
+            priority: 'medium',
+            done: '',
+            details: t.details || '',
+            createdAt: t.createdAt || new Date().toISOString()
+          }));
+          localStorage.setItem(TASKS_KEY, JSON.stringify(migrated));
+        } catch {}
+      }
+      if (!localStorage.getItem(NOTES_KEY) && localStorage.getItem('ivan-pult-notes-v1')) {
+        const text = localStorage.getItem('ivan-pult-notes-v1');
+        if (text && text.trim()) {
+          localStorage.setItem(NOTES_KEY, JSON.stringify([{ text: text.trim(), createdAt: new Date().toISOString() }]));
+        }
+      }
+    }
+
+    function makeId() {
+      return (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Math.random().toString(36).slice(2) + Date.now());
+    }
+
     function getTasks() {
-      try { return JSON.parse(localStorage.getItem(storageKey)) || []; }
+      try { return JSON.parse(localStorage.getItem(TASKS_KEY)) || []; }
       catch { return []; }
     }
 
     function setTasks(tasks) {
-      localStorage.setItem(storageKey, JSON.stringify(tasks));
+      localStorage.setItem(TASKS_KEY, JSON.stringify(tasks));
       renderTasks();
     }
 
     function renderTasks() {
       const tasks = getTasks();
-      const list = $('taskList');
-      if (!tasks.length) {
-        list.innerHTML = '<div class="item"><div class="item-title">Пока пусто</div><div class="meta">Добавь первую задачу выше.</div></div>';
-        return;
-      }
-      list.innerHTML = tasks.map((task, index) => `
-        <div class="item">
-          <div class="item-head">
-            <div>
-              <div class="item-title">${escapeHtml(task.title)}</div>
-              <div class="meta">${escapeHtml(task.when)} · ${escapeHtml(task.area)}</div>
+      ['today', 'next', 'later'].forEach((group) => {
+        const items = tasks
+          .filter((t) => t.when === group)
+          .sort((a, b) => (PRIORITY_WEIGHT[b.priority] || 0) - (PRIORITY_WEIGHT[a.priority] || 0) || new Date(b.createdAt) - new Date(a.createdAt));
+
+        $('count-' + group).textContent = items.length;
+        const list = $('list-' + group);
+
+        if (!items.length) {
+          list.innerHTML = '<div class="empty">Пусто</div>';
+          return;
+        }
+
+        list.innerHTML = items.map((task) => `
+          <div class="task">
+            <button class="check" title="Готово" onclick="completeTask('${task.id}')">✓</button>
+            <div class="task-body">
+              <div class="task-title-row">
+                <span class="task-title">${escapeHtml(task.title)}</span>
+                <span class="tag tag-${task.priority}">${PRIORITY_LABEL[task.priority] || 'Средний'}</span>
+              </div>
+              <div class="task-meta">${escapeHtml(task.area)}${task.details ? ' · ' + escapeHtml(task.details) : ''}</div>
+              ${task.done ? `<div class="task-done">Готово, когда: ${escapeHtml(task.done)}</div>` : ''}
             </div>
-            <button class="delete" onclick="deleteTask(${index})">убрать</button>
           </div>
-          ${task.details ? `<div class="meta">${escapeHtml(task.details)}</div>` : ''}
-        </div>
-      `).join('');
+        `).join('');
+      });
     }
 
-    function deleteTask(index) {
-      const tasks = getTasks();
-      tasks.splice(index, 1);
-      setTasks(tasks);
+    function completeTask(id) {
+      setTasks(getTasks().filter((t) => t.id !== id));
     }
-    window.deleteTask = deleteTask;
+    window.completeTask = completeTask;
 
     function escapeHtml(str) {
       return String(str).replace(/[&<>'"]/g, (ch) => ({
@@ -432,29 +617,73 @@
     $('taskForm').addEventListener('submit', (event) => {
       event.preventDefault();
       const form = new FormData(event.currentTarget);
+      const title = (form.get('title') || '').trim();
+      if (!title) return;
       const task = {
-        title: form.get('title').trim(),
+        id: makeId(),
+        title,
         area: form.get('area'),
         when: form.get('when'),
-        details: form.get('details').trim(),
+        priority: form.get('priority'),
+        done: (form.get('done') || '').trim(),
+        details: (form.get('details') || '').trim(),
         createdAt: new Date().toISOString()
       };
-      if (!task.title) return;
       setTasks([task, ...getTasks()]);
       event.currentTarget.reset();
-      $('when').value = 'Завтра';
+      $('when').value = 'next';
+      $('priority').value = 'medium';
     });
+
+    function getNotes() {
+      try { return JSON.parse(localStorage.getItem(NOTES_KEY)) || []; }
+      catch { return []; }
+    }
+
+    function setNotes(notes) {
+      localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+      renderNotes();
+    }
+
+    function renderNotes() {
+      const notes = getNotes();
+      const box = $('noteList');
+      if (!notes.length) {
+        box.innerHTML = '';
+        return;
+      }
+      box.innerHTML = notes.map((note, index) => `
+        <div class="note">
+          <div>${escapeHtml(note.text)}</div>
+          <time>${formatShortDate(note.createdAt)}</time>
+          <button class="note-del" onclick="deleteNote(${index})">убрать</button>
+        </div>
+      `).join('');
+    }
+
+    function deleteNote(index) {
+      const notes = getNotes();
+      notes.splice(index, 1);
+      setNotes(notes);
+    }
+    window.deleteNote = deleteNote;
+
+    function formatShortDate(iso) {
+      try {
+        return new Date(iso).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+      } catch { return ''; }
+    }
 
     $('saveNote').addEventListener('click', () => {
       const text = $('notesInput').value.trim();
-      localStorage.setItem(notesKey, text);
-      $('noteBox').textContent = text || 'Пусто';
+      if (!text) return;
+      setNotes([{ text, createdAt: new Date().toISOString() }, ...getNotes()]);
+      $('notesInput').value = '';
     });
 
-    const savedNote = localStorage.getItem(notesKey) || '';
-    $('notesInput').value = savedNote;
-    $('noteBox').textContent = savedNote || 'Пусто';
+    migrateOldData();
     renderTasks();
+    renderNotes();
   </script>
 </body>
 </html>
