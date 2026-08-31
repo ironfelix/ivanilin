@@ -9,6 +9,7 @@ import {
   doneSince, openTasks, topGoalToday, topGoalStreak, logTopGoal,
   exportJSON, importJSON,
   agents, mike, readyAgents, addAgent, removeAgent, sendToAgent, mikeFetch,
+  sync, onSync, syncNow, syncBoot, markDirty,
   todayISO, daysSince, plural,
 } from './store.js';
 import { parseQuickAdd, parseNoteLines } from './parse.js';
@@ -153,6 +154,7 @@ function shell() {
       <header class="topbar">
         <div><h1>${esc(title)}</h1><div class="topbar-sub">${esc(sub)}</div></div>
         <div class="topbar-spacer"></div>
+        ${syncChip()}
         <button class="btn btn-sm desktop-only" data-action="focus-capture">+ Задача <span style="color:var(--faint)">N</span></button>
       </header>
       ${showCapture ? captureBar() : ''}
@@ -164,6 +166,22 @@ function shell() {
   ${ui.selected ? '<div class="sheet-backdrop" data-action="close-detail"></div>' : ''}
   <nav class="tabbar">${tabs}</nav>
   <button class="fab" data-action="focus-capture" aria-label="Новая задача">+</button>`;
+}
+
+/** Состояние базы одной строкой: человеку важно знать, уехали ли правки. */
+function syncChip() {
+  const pending = ['tasks', 'projects', 'goals', 'notes']
+    .reduce((n, k) => n + sync.dirty[k].size, 0) + (sync.dirty.kv ? 1 : 0);
+  const map = {
+    off:     ['', 'только этот браузер', 'Данные не синхронизируются: задайте токен Майка в разделе «Агенты»'],
+    syncing: ['is-sync', 'синхронизация…', ''],
+    ok:      ['is-ok', pending ? `${pending} в очереди` : 'на сервере', 'Данные в базе на сервере'],
+    error:   ['is-err', 'нет связи', sync.error],
+    idle:    ['', '…', ''],
+  };
+  const [cls, text, title] = map[sync.status] || map.idle;
+  return `<button class="syncchip ${cls}" data-action="sync-now" title="${esc(title)}">
+    <span class="dot ${cls === 'is-ok' ? 'is-ok' : cls === 'is-err' ? 'is-err' : ''}"></span>${esc(text)}</button>`;
 }
 
 function captureBar() {
@@ -977,14 +995,14 @@ const ACTIONS = {
   'close-detail': () => { ui.selected = null; render(); },
   ctx: (el) => { ui.ctxFilter = el.dataset.ctx; render(); },
 
-  ladder: (el) => commit((s) => { s.topGoal.ladder = Number(el.dataset.min); }),
+  ladder: (el) => { markDirty('kv'); commit((s) => { s.topGoal.ladder = Number(el.dataset.min); }); },
   'add-min': (el) => logTopGoal(Number(el.dataset.min)),
   timer() {
     const started = state.topGoal.timerStartedAt;
     if (started) {
       const start = new Date(started);
       const mins = Math.max(1, Math.round((Date.now() - start.getTime()) / 60000));
-      commit((s) => { s.topGoal.timerStartedAt = null; });
+      commit((s) => { s.topGoal.timerStartedAt = null; }); markDirty('kv');
       const startDay = todayISO(start);
       if (startDay === todayISO()) {
         logTopGoal(mins);
@@ -996,7 +1014,7 @@ const ACTIONS = {
         logTopGoal(Math.max(1, mins - before));
       }
     } else {
-      commit((s) => { s.topGoal.timerStartedAt = new Date().toISOString(); });
+      commit((s) => { s.topGoal.timerStartedAt = new Date().toISOString(); }); markDirty('kv');
     }
   },
 
@@ -1006,8 +1024,11 @@ const ACTIONS = {
     if (!confirm('Удалить проект? Задачи останутся, но потеряют привязку.')) return;
     commit((s) => {
       s.projects = s.projects.filter((p) => p.id !== el.dataset.id);
-      s.tasks.forEach((t) => { if (t.projectId === el.dataset.id) t.projectId = null; });
+      s.tasks.forEach((t) => {
+        if (t.projectId === el.dataset.id) { t.projectId = null; markDirty('tasks', t.id); }
+      });
     });
+    markDirty('projects', el.dataset.id);
     ui.selected = null; render();
   },
   'to-project': (el) => {
@@ -1020,14 +1041,17 @@ const ACTIONS = {
   },
 
   'new-goal': () => addGoal({ title: 'Новая цель' }),
-  'set-top': (el) => commit((s) => s.goals.forEach((g) => { g.isTop = g.id === el.dataset.id; })),
-  'toggle-horizon': (el) => commit((s) => {
-    const g = s.goals.find((x) => x.id === el.dataset.id);
-    if (g) g.horizon = g.horizon === 'year' ? 'quarter' : 'year';
+  'set-top': (el) => commit((s) => s.goals.forEach((g) => {
+    g.isTop = g.id === el.dataset.id;
+    markDirty('goals', g.id);
+  })),
+  'toggle-horizon': (el) => editGoal(el.dataset.id, (g) => {
+    g.horizon = g.horizon === 'year' ? 'quarter' : 'year';
   }),
   'del-goal': (el) => {
     if (!confirm('Удалить цель?')) return;
     commit((s) => { s.goals = s.goals.filter((g) => g.id !== el.dataset.id); });
+    markDirty('goals', el.dataset.id);
   },
 
   'toggle-top': (el) => {
@@ -1042,6 +1066,7 @@ const ACTIONS = {
     render();
   },
   'finish-review'() {
+    markDirty('kv');
     commit((s) => {
       s.review.lastAt = new Date().toISOString();
       s.review.history.unshift(s.review.lastAt);
@@ -1058,6 +1083,7 @@ const ACTIONS = {
   'del-note': (el) => {
     if (!confirm('Удалить конспект?')) return;
     commit((s) => { s.notes = s.notes.filter((n) => n.id !== el.dataset.id); });
+    markDirty('notes', el.dataset.id);
     ui.openNote = null; render();
   },
   extract: (el) => {
@@ -1080,6 +1106,7 @@ const ACTIONS = {
     const a = agents().find((x) => x.id === el.dataset.id);
     if (a) await sendToAgent(a, 'ping', { from: 'pult', at: new Date().toISOString() });
   },
+  'sync-now': () => { syncNow(); },
   'agent-add': () => addAgent(),
   'agent-del': (el) => {
     if (!confirm('Удалить агента? Журнал отправок останется.')) return;
@@ -1208,6 +1235,19 @@ document.addEventListener('click', (e) => {
 
 /* ---------- редактирование полей ---------- */
 
+/* Правка сущности + отметка «отправить на сервер». Конспекты и проекты
+   получают updatedAt: по нему сервер разводит одновременные правки. */
+const editEntity = (kind, id, fn) => commit((s) => {
+  const item = s[kind].find((x) => x.id === id);
+  if (!item) return;
+  fn(item);
+  if ('updatedAt' in item) item.updatedAt = new Date().toISOString();
+  markDirty(kind, id);
+});
+const editProject = (id, fn) => editEntity('projects', id, fn);
+const editGoal = (id, fn) => editEntity('goals', id, fn);
+const editNote = (id, fn) => editEntity('notes', id, fn);
+
 const EDITS = {
   'task-title': (id, v) => updateTask(id, { title: v }),
   'task-note': (id, v) => updateTask(id, { note: v }),
@@ -1217,16 +1257,16 @@ const EDITS = {
   'task-person': (id, v) => updateTask(id, { person: v }),
   'task-due': (id, v) => updateTask(id, { due: v || null }),
   'task-minutes': (id, v) => updateTask(id, { minutes: v ? Number(v) : null }),
-  'project-title': (id, v) => commit((s) => { const p = s.projects.find((x) => x.id === id); if (p) p.title = v; }),
-  'project-outcome': (id, v) => commit((s) => { const p = s.projects.find((x) => x.id === id); if (p) p.outcome = v; }),
-  'project-goal': (id, v) => commit((s) => { const p = s.projects.find((x) => x.id === id); if (p) p.goalId = v || null; }),
-  'project-status': (id, v) => commit((s) => { const p = s.projects.find((x) => x.id === id); if (p) p.status = v; }),
-  'goal-title': (id, v) => commit((s) => { const g = s.goals.find((x) => x.id === id); if (g) g.title = v; }),
-  'note-title': (id, v) => commit((s) => { const n = s.notes.find((x) => x.id === id); if (n) n.title = v; }),
-  'note-person': (id, v) => commit((s) => { const n = s.notes.find((x) => x.id === id); if (n) n.person = v; }),
-  'note-date': (id, v) => commit((s) => { const n = s.notes.find((x) => x.id === id); if (n) n.date = v; }),
-  'note-project': (id, v) => commit((s) => { const n = s.notes.find((x) => x.id === id); if (n) n.projectId = v || null; }),
-  'note-body': (id, v) => commit((s) => { const n = s.notes.find((x) => x.id === id); if (n) n.body = v; }),
+  'project-title': (id, v) => editProject(id, (p) => { p.title = v; }),
+  'project-outcome': (id, v) => editProject(id, (p) => { p.outcome = v; }),
+  'project-goal': (id, v) => editProject(id, (p) => { p.goalId = v || null; }),
+  'project-status': (id, v) => editProject(id, (p) => { p.status = v; }),
+  'goal-title': (id, v) => editGoal(id, (g) => { g.title = v; }),
+  'note-title': (id, v) => editNote(id, (n) => { n.title = v; }),
+  'note-person': (id, v) => editNote(id, (n) => { n.person = v; }),
+  'note-date': (id, v) => editNote(id, (n) => { n.date = v; }),
+  'note-project': (id, v) => editNote(id, (n) => { n.projectId = v || null; }),
+  'note-body': (id, v) => editNote(id, (n) => { n.body = v; }),
   'agent-name': (id, v) => commit((s) => { const a = s.settings.agents.find((x) => x.id === id); if (a) a.name = v; }),
   'agent-url': (id, v) => commit((s) => { const a = s.settings.agents.find((x) => x.id === id); if (a) a.url = v; }),
   'agent-token': (id, v) => commit((s) => { const a = s.settings.agents.find((x) => x.id === id); if (a) a.token = v; }),
@@ -1339,6 +1379,12 @@ window.addEventListener('hashchange', route);
 
 applyTheme();
 route();
+
+// база на сервере: подтянуть чужое и отдать своё; перерисовываем по смене статуса
+onSync(() => renderSoft());
+syncBoot();
+// возвращаемся к вкладке — забираем правки, сделанные на другом устройстве
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
 
 // тикающие часы, пока идёт сессия Top Goal
 setInterval(() => {

@@ -1,6 +1,8 @@
 /* Хранилище GTD-админки.
-   Данные живут в localStorage браузера — на сервер ничего не уходит,
-   пока вы сами не нажмёте «Отправить» в разделе «Боты». */
+   Источник правды — база на сервере (/pult/api/), localStorage работает
+   офлайн-кешем: без сети пульт открывается и пишет, правки уезжают позже.
+   Пока токен Майка не задан, сервер не используется вовсе — всё как раньше,
+   только в этом браузере. */
 
 const KEY = 'ivanilin.gtd.v1';
 
@@ -199,6 +201,10 @@ window.addEventListener('beforeunload', persist);
 
 /* ---------- задачи ---------- */
 
+/* Мутации помечают изменённое для синхронизации. Хук, а не прямой вызов:
+   markDirty объявлен ниже по файлу, а модуль исполняется сверху вниз. */
+const touch = (kind, id) => { try { markDirty(kind, id); } catch {} };
+
 export function addTask(patch = {}) {
   const task = {
     id: uid(),
@@ -217,6 +223,7 @@ export function addTask(patch = {}) {
     ...patch,
   };
   commit((s) => s.tasks.unshift(task));
+  touch('tasks', task.id);
   return task;
 }
 
@@ -226,6 +233,7 @@ export function updateTask(id, patch) {
     if (!t) return;
     Object.assign(t, patch, { updatedAt: new Date().toISOString() });
   });
+  touch('tasks', id);
 }
 
 export function toggleDone(id) {
@@ -242,12 +250,14 @@ export function toggleDone(id) {
     }
     t.updatedAt = new Date().toISOString();
   });
+  touch('tasks', id);
 }
 
 export function removeTask(id) {
   commit((s) => {
     s.tasks = s.tasks.filter((x) => x.id !== id);
   });
+  touch('tasks', id);   // удаление уезжает как строка с deleted
 }
 
 /* ---------- проекты, цели, конспекты ---------- */
@@ -264,6 +274,7 @@ export function addProject(patch = {}) {
     ...patch,
   };
   commit((s) => s.projects.unshift(p));
+  touch('projects', p.id);
   return p;
 }
 
@@ -276,6 +287,7 @@ export function findOrCreateProject(title) {
 export function addGoal(patch = {}) {
   const g = { id: uid(), title: '', horizon: 'year', isTop: false, createdAt: new Date().toISOString(), ...patch };
   commit((s) => s.goals.unshift(g));
+  touch('goals', g.id);
   return g;
 }
 
@@ -292,6 +304,7 @@ export function addNote(patch = {}) {
     ...patch,
   };
   commit((s) => s.notes.unshift(n));
+  touch('notes', n.id);
   return n;
 }
 
@@ -345,6 +358,7 @@ export const topGoalStreak = () => {
 };
 
 export function logTopGoal(minutes, day = todayISO()) {
+  touch('kv');
   commit((s) => {
     s.topGoal.log[day] = Math.max(0, (s.topGoal.log[day] || 0) + minutes);
     if (!s.topGoal.log[day]) delete s.topGoal.log[day];
@@ -470,6 +484,122 @@ export async function sendToAgent(agent, event, payload) {
   }
   return entry;
 }
+
+/* ---------- синхронизация с сервером ---------- */
+
+/* Источник правды — база на сервере (/pult/api/). localStorage остаётся
+   офлайн-кешем: пульт открывается и работает без сети, а накопленные правки
+   уезжают, когда связь вернётся. Порядок правок разводим по номеру ревизии,
+   а не по времени — часы у телефона и ноутбука разные. */
+
+const SYNCED = ['tasks', 'projects', 'goals', 'notes'];
+
+export const sync = {
+  rev: 0, at: null, status: 'idle', error: '',   // idle|off|syncing|ok|error
+  dirty: { tasks: new Set(), projects: new Set(), goals: new Set(), notes: new Set(), kv: false },
+};
+
+const syncListeners = new Set();
+export const onSync = (fn) => { syncListeners.add(fn); return () => syncListeners.delete(fn); };
+const emitSync = () => syncListeners.forEach((fn) => fn(sync));
+
+/** Помечаем изменённое, чтобы не гонять всю базу на каждый чих. */
+export function markDirty(kind, id) {
+  if (kind === 'kv') sync.dirty.kv = true;
+  else sync.dirty[kind]?.add(id);
+  scheduleSync();
+}
+
+let syncTimer = null;
+function scheduleSync() {
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => syncNow(), 1500);
+}
+
+const authHeaders = () => {
+  const m = mike();
+  return m?.token.trim() ? { Authorization: 'Bearer ' + m.token.trim() } : null;
+};
+
+function applyIncoming(data) {
+  for (const kind of SYNCED) {
+    for (const item of data[kind] || []) {
+      const arr = state[kind];
+      const i = arr.findIndex((x) => x.id === item.id);
+      if (item.deleted) { if (i >= 0) arr.splice(i, 1); continue; }
+      // свои несохранённые правки чужими не затираем
+      if (sync.dirty[kind].has(item.id)) continue;
+      if (i >= 0) Object.assign(arr[i], item); else arr.push(item);
+    }
+  }
+  for (const [k, v] of Object.entries(data.kv || {})) {
+    if (k === 'topGoal' && !sync.dirty.kv) state.topGoal = v;
+    if (k === 'review' && !sync.dirty.kv) state.review = v;
+  }
+  sync.rev = data.rev;
+}
+
+export async function syncNow() {
+  const headers = authHeaders();
+  if (!headers) { sync.status = 'off'; emitSync(); return; }
+  if (sync.status === 'syncing') { scheduleSync(); return; }
+  sync.status = 'syncing'; emitSync();
+
+  try {
+    // 1) отдаём накопленное
+    const payload = {};
+    let has = false;
+    for (const kind of SYNCED) {
+      const ids = sync.dirty[kind];
+      if (!ids.size) continue;
+      payload[kind] = [...ids].map((id) => {
+        const item = state[kind].find((x) => x.id === id);
+        return item ? { ...item } : { id, deleted: true };
+      });
+      has = true;
+    }
+    if (sync.dirty.kv) {
+      payload.kv = { topGoal: state.topGoal, review: state.review };
+      has = true;
+    }
+    const sending = { tasks: new Set(sync.dirty.tasks), projects: new Set(sync.dirty.projects),
+                      goals: new Set(sync.dirty.goals), notes: new Set(sync.dirty.notes), kv: sync.dirty.kv };
+    if (has) {
+      const res = await fetch('/pult/api/push', {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error('push ' + res.status + (res.status === 403 ? ' — проверьте токен' : ''));
+      // отправленное вычищаем, но только его: пока шёл запрос, могли добавиться новые
+      for (const kind of SYNCED) sending[kind].forEach((id) => sync.dirty[kind].delete(id));
+      if (sending.kv) sync.dirty.kv = false;
+    }
+
+    // 2) забираем чужое
+    const res = await fetch(`/pult/api/pull?since=${sync.rev}`, { headers });
+    if (!res.ok) throw new Error('pull ' + res.status + (res.status === 403 ? ' — проверьте токен' : ''));
+    applyIncoming(await res.json());
+
+    sync.status = 'ok'; sync.error = ''; sync.at = new Date().toISOString();
+    persist();
+    listeners.forEach((fn) => fn(state));
+  } catch (e) {
+    sync.status = 'error';
+    sync.error = String(e.message || e);
+  }
+  emitSync();
+}
+
+/** Первый заход: подтянуть базу и, если локально что-то есть, отдать своё. */
+export async function syncBoot() {
+  if (!authHeaders()) { sync.status = 'off'; emitSync(); return; }
+  // всё локальное считаем неотправленным — сервер разрулит по updatedAt
+  for (const kind of SYNCED) state[kind].forEach((x) => sync.dirty[kind].add(x.id));
+  sync.dirty.kv = true;
+  await syncNow();
+}
+
+window.addEventListener('online', () => scheduleSync());
 
 /** Чтение файлов Майка через мост (журнал, TODO.md, конспекты). */
 export async function mikeFetch(path) {

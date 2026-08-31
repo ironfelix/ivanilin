@@ -512,3 +512,20 @@ a { color: inherit; }
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 20px 22px;
 }
+
+/* состояние базы в шапке */
+.syncchip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; margin-right: 8px;
+  font: inherit; font-size: 12px; color: var(--muted);
+  background: transparent; border: 1px solid var(--line);
+  border-radius: 999px; cursor: pointer; white-space: nowrap;
+}
+.syncchip:hover { border-color: var(--accent); color: var(--text); }
+.syncchip.is-err { color: var(--danger); border-color: var(--danger); }
+.syncchip.is-sync { opacity: .65; }
+/* на телефоне место дорого, но знать статус важно — оставляем точку */
+@media (max-width: 620px) {
+  .syncchip { padding: 4px 7px; font-size: 0; gap: 0; }
+  .syncchip .dot { margin-right: 0; }
+}
