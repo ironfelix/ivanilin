@@ -494,3 +494,21 @@ a { color: inherit; }
   border: 1px solid var(--line); border-radius: var(--radius);
   background: var(--surface);
 }
+
+/* агенты */
+.is-main-agent { border-color: var(--accent); }
+.agent-status { font-size: 12px; font-weight: 400; color: var(--muted); margin-left: 8px; white-space: nowrap; }
+.dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--faint); margin-right: 5px; vertical-align: baseline;
+}
+.dot.is-ok { background: var(--ok); }
+.dot.is-err { background: var(--danger); }
+
+/* конспект Майка — только чтение */
+.mdview {
+  white-space: pre-wrap; overflow-wrap: break-word;
+  font-size: 14px; line-height: 1.6; color: var(--text);
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 20px 22px;
+}

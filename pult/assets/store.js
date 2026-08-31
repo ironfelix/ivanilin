@@ -24,6 +24,12 @@ export const LISTS = {
 
 export const LADDER = [30, 45, 60, 90, 120];
 
+/** Майк — главный агент. Живёт на этом же домене (мост /mike/), поэтому
+    из настроек ему нужен только токен: адреса зашиты, CORS не существует. */
+const mikeAgent = () => ({
+  id: 'mike', kind: 'mike', name: 'Майк', url: '', token: '', main: true,
+});
+
 const EMPTY = () => ({
   version: 1,
   tasks: [],
@@ -32,8 +38,8 @@ const EMPTY = () => ({
   notes: [],
   topGoal: { ladder: 30, log: {} },          // log: { '2026-08-31': минуты }
   review: { lastAt: null, history: [] },
-  settings: { theme: 'auto', webhookUrl: '', webhookToken: '', seoUrl: '/seo-status/' },
-  outbox: [],                                 // журнал отправок в Make
+  settings: { theme: 'auto', seoUrl: '/seo-status/', agents: [mikeAgent()] },
+  outbox: [],                                 // журнал отправок агентам
   updatedAt: null,
 });
 
@@ -70,6 +76,18 @@ function migrate(raw) {
   for (const k of ['tasks', 'projects', 'goals', 'notes', 'outbox']) {
     if (!Array.isArray(s[k])) s[k] = [];
   }
+  // агенты: Майк присутствует всегда, старый одиночный вебхук переезжает в список
+  if (!Array.isArray(s.settings.agents)) s.settings.agents = [];
+  if (!s.settings.agents.some((a) => a.kind === 'mike')) s.settings.agents.unshift(mikeAgent());
+  const legacyUrl = (raw.settings || {}).webhookUrl;
+  if (legacyUrl && !s.settings.agents.some((a) => a.url === legacyUrl)) {
+    s.settings.agents.push({
+      id: uid(), kind: 'webhook', name: 'Вебхук', url: legacyUrl,
+      token: (raw.settings || {}).webhookToken || '', main: false,
+    });
+  }
+  delete s.settings.webhookUrl;
+  delete s.settings.webhookToken;
   return s;
 }
 
@@ -320,7 +338,8 @@ export const topGoalStreak = () => {
     const day = todayISO(new Date(Date.now() - i * 86400000));
     const min = state.topGoal.log[day] || 0;
     if (min >= state.topGoal.ladder) streak++;
-    else if (i > 0 || min === 0) break;
+    else if (i > 0) break;
+    // сегодняшний недобор (в т.ч. 0 утром) серию не рвёт — день ещё не кончился
   }
   return streak;
 };
@@ -349,36 +368,99 @@ export async function importJSON(file) {
   persist();
 }
 
-/* ---------- интеграция наружу (Make / n8n / любой вебхук) ---------- */
+/* ---------- агенты ---------- */
 
-/** Content-Type: text/plain — чтобы браузер не слал preflight и вебхук
-    принимал запрос без настройки CORS. Тело всё равно JSON. */
-export async function sendToWebhook(event, payload) {
-  const url = state.settings.webhookUrl.trim();
-  const entry = {
-    id: uid(),
-    at: new Date().toISOString(),
-    event,
-    payload,
-    status: 'pending',
-    response: '',
-  };
-  commit((s) => s.outbox.unshift(entry));
+/* Майк — hermes-агент на этом же домене: пульт говорит с ним обычным
+   чатом (формат OpenAI) и читает его файлы через мост. Остальные агенты —
+   вебхуки: POST c text/plain, чтобы обойтись без CORS-preflight. */
 
-  if (!url) {
-    commit(() => { entry.status = 'error'; entry.response = 'Не задан URL вебхука'; });
-    return entry;
+const MIKE_CHAT = '/mike/v1/chat/completions';
+const MIKE_CONTEXT = '/mike/context/';
+
+export const agents = () => state.settings.agents;
+export const mike = () => agents().find((a) => a.kind === 'mike');
+/** Агенты, которым реально можно отправить: у Майка есть токен, у вебхука — URL. */
+export const readyAgents = () =>
+  agents().filter((a) => (a.kind === 'mike' ? a.token.trim() : a.url.trim()));
+
+export function addAgent() {
+  const a = { id: uid(), kind: 'webhook', name: 'Новый агент', url: '', token: '', main: false };
+  commit((s) => s.settings.agents.push(a));
+  return a;
+}
+
+export function removeAgent(id) {
+  commit((s) => {
+    s.settings.agents = s.settings.agents.filter((a) => a.id !== id || a.kind === 'mike');
+  });
+}
+
+/** Письмо Майку: человекочитаемый текст, из которого агент сам заведёт
+    задачу, сохранит конспект или возьмёт поручение в работу. */
+function mikeMessage(event, p) {
+  if (event === 'ping') {
+    return 'Проверка связи из пульта (ivanilin.ru/pult). Ответь одной короткой фразой.';
   }
+  if (event === 'task.send') {
+    const bits = [
+      p.due && `срок: ${p.due}`, p.person && `человек: ${p.person}`,
+      p.projectTitle && `проект: ${p.projectTitle}`, p.minutes && `оценка: ${p.minutes} мин`,
+    ].filter(Boolean).join(', ');
+    return `Задача из пульта Ивана:\n«${p.title}»${bits ? `\n(${bits})` : ''}` +
+      (p.note ? `\nЗаметка: ${p.note}` : '') +
+      '\n\nЗаведи её у себя (TODO/Todoist) и подтверди одной строкой.';
+  }
+  if (event === 'note.send') {
+    return `Конспект из пульта Ивана — сохрани к себе в konspekty/ и подтверди одной строкой.\n\n` +
+      `# ${p.title || 'Без названия'}\n` +
+      [p.person && `Кто: ${p.person}`, p.date && `Дата: ${p.date}`].filter(Boolean).join(' · ') +
+      `\n\n${p.body}`;
+  }
+  if (event === 'errand') {
+    return `Поручение из пульта Ивана:\n\n${p.text}\n\n` +
+      'Возьми в работу; если чего-то не хватает — спроси Ивана в Telegram.';
+  }
+  return JSON.stringify(p);
+}
+
+export async function sendToAgent(agent, event, payload) {
+  const entry = {
+    id: uid(), at: new Date().toISOString(),
+    agentId: agent.id, agentName: agent.name,
+    event, payload, status: 'pending', response: '',
+  };
+  // журнал не растёт бесконечно: localStorage общий с задачами
+  commit((s) => { s.outbox.unshift(entry); s.outbox = s.outbox.slice(0, 50); });
+
   try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify({ event, token: state.settings.webhookToken || undefined, payload }),
-    });
-    const text = (await res.text()).slice(0, 300);
+    let res, reply;
+    if (agent.kind === 'mike') {
+      if (!agent.token.trim()) throw new Error('Не задан токен Майка');
+      res = await fetch(MIKE_CHAT, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + agent.token.trim(),
+        },
+        body: JSON.stringify({
+          model: 'hermes-agent',
+          messages: [{ role: 'user', content: mikeMessage(event, payload) }],
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      reply = data?.choices?.[0]?.message?.content || data?.error?.message || '';
+    } else {
+      if (!agent.url.trim()) throw new Error('Не задан URL агента');
+      res = await fetch(agent.url.trim(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ event, token: agent.token.trim() || undefined, payload }),
+      });
+      reply = await res.text();
+    }
     commit(() => {
       entry.status = res.ok ? 'ok' : 'error';
-      entry.response = `${res.status} ${text}`;
+      entry.response = (res.ok ? '' : res.status + ' ') + reply.trim().slice(0, 300);
     });
   } catch (e) {
     commit(() => {
@@ -387,4 +469,15 @@ export async function sendToWebhook(event, payload) {
     });
   }
   return entry;
+}
+
+/** Чтение файлов Майка через мост (журнал, TODO.md, конспекты). */
+export async function mikeFetch(path) {
+  const m = mike();
+  if (!m?.token.trim()) throw new Error('Не задан токен Майка — раздел «Агенты»');
+  const res = await fetch(MIKE_CONTEXT + path, {
+    headers: { Authorization: 'Bearer ' + m.token.trim() },
+  });
+  if (!res.ok) throw new Error('Мост ответил ' + res.status + (res.status === 403 ? ' — проверьте токен' : ''));
+  return res.text();
 }

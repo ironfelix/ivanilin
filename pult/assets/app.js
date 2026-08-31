@@ -7,8 +7,9 @@ import {
   addProject, findOrCreateProject, addGoal, addNote,
   byList, projectTasks, stalledProjects, staleWaiting, overdue, dueToday,
   doneSince, openTasks, topGoalToday, topGoalStreak, logTopGoal,
-  exportJSON, importJSON, sendToWebhook,
-  todayISO, daysSince, plural, uid,
+  exportJSON, importJSON,
+  agents, mike, readyAgents, addAgent, removeAgent, sendToAgent, mikeFetch,
+  todayISO, daysSince, plural,
 } from './store.js';
 import { parseQuickAdd, parseNoteLines } from './parse.js';
 import { toMarkdown, fromMarkdown, sameTask } from './markdown.js';
@@ -48,7 +49,7 @@ const NAV = [
   { group: 'Горизонты', items: [['projects', 'Проекты', '▦'], ['goals', 'Цели', '★']] },
   { group: 'База', items: [
     ['notes', 'Конспекты', '✎'], ['seo', 'SEO-пайплайн', '◈'],
-    ['bots', 'Боты и Make', '⚡'], ['settings', 'Данные', '⚙'],
+    ['agents', 'Агенты', '⚡'], ['settings', 'Данные', '⚙'],
   ] },
 ];
 
@@ -69,7 +70,7 @@ const TITLES = {
   goals: ['Цели', 'Горизонты выше проектов'],
   notes: ['Конспекты', 'Записи звонков и встреч'],
   seo: ['SEO-пайплайн', 'Рабочая таблица по продвижению'],
-  bots: ['Боты и Make', 'Запуск сценариев наружу'],
+  agents: ['Агенты', 'Майк и другие исполнители — потоки наружу'],
   settings: ['Данные', 'Хранение, экспорт, оформление'],
   more: ['Ещё', 'Остальные разделы'],
 };
@@ -103,6 +104,8 @@ const ui = {
   openNote: null,
   ctxFilter: 'all',
   timerTick: null,
+  mikeIndex: null,      // список конспектов Майка: null | 'loading' | [] | {error}
+  mikeNote: null,       // открытый конспект Майка: { file, text }
 };
 
 /* ---------- каркас ---------- */
@@ -130,7 +133,7 @@ function shell() {
     </a>`;
   }).join('');
 
-  const showCapture = !['settings', 'bots', 'goals', 'more'].includes(ui.route);
+  const showCapture = !['settings', 'agents', 'goals', 'more'].includes(ui.route);
 
   return `
   <div class="app ${ui.selected ? 'has-detail' : ''}">
@@ -375,7 +378,7 @@ function viewList(list) {
 
   return `
   <p class="hint" style="margin-bottom:14px">Идеи и обязательства, к которым вы сознательно не приступаете. Перечитывайте на недельном ревью.</p>
-  ${taskList(all, 'Пока пусто. Захват: <code>~</code> в строке.', '∞')}`;
+  ${taskList(all, 'Пока пусто. Захват: символ ~ в строке.', '∞')}`;
 }
 
 /* ---------- проекты ---------- */
@@ -522,8 +525,19 @@ function viewNotes() {
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-primary" data-action="extract" data-id="${n.id}" ${found ? '' : 'disabled'}>
         Извлечь действия${found ? ` (${found})` : ''}</button>
+      ${mike()?.token.trim() ? `<button class="btn" data-action="send-note" data-id="${n.id}">⚡ Майку</button>` : ''}
       <span class="hint">Строки с <code>-</code> → действие, <code>?</code> → ожидание, <code>&gt;</code> → повестка</span>
     </div>`;
+  }
+
+  // конспект Майка открыт на чтение
+  if (ui.mikeNote) {
+    return `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">
+      <button class="btn btn-sm" data-action="mike-close-note">← Все конспекты</button>
+      <span class="chip">из архива Майка · только чтение</span>
+    </div>
+    <div class="mdview">${esc(ui.mikeNote.text)}</div>`;
   }
 
   return `
@@ -539,7 +553,29 @@ function viewNotes() {
         ${n.projectId ? `<span class="chip">▦ ${esc(projectTitle(n.projectId))}</span>` : ''}
       </div>
     </button>`).join('')}</div>`
-    : `<div class="empty"><span class="empty-emoji">✎</span><p>Записывайте звонки сюда, а решения из них разбирайте в действия одной кнопкой.</p></div>`}`;
+    : `<div class="empty"><span class="empty-emoji">✎</span><p>Записывайте звонки сюда, а решения из них разбирайте в действия одной кнопкой.</p></div>`}
+  ${mikeNotesBlock()}`;
+}
+
+/** Архив конспектов Майка — читается с его сервера через мост. */
+function mikeNotesBlock() {
+  if (!mike()?.token.trim()) return '';
+  const list = ui.mikeIndex;
+  return `
+  <div class="section-head" style="margin-top:26px"><h2>Конспекты Майка</h2>
+    ${Array.isArray(list) ? `<span class="count">${list.length}</span>` : ''}<span class="spacer"></span>
+    <button class="btn btn-sm" data-action="mike-load-notes">${Array.isArray(list) ? 'Обновить' : 'Показать'}</button></div>
+  ${list === 'loading' ? '<p class="hint">Загружаю…</p>' : ''}
+  ${typeof list === 'object' && list?.error ? `<p class="hint" style="color:var(--danger)">${esc(list.error)}</p>` : ''}
+  ${Array.isArray(list) ? (list.length ? `<div class="cards">${list.map((k) => `
+    <button class="card" data-action="mike-open-note" data-file="${esc(k.file)}">
+      <h3>${esc(k.title)}</h3>
+      <div class="card-foot">
+        <span class="chip">${fmtDate(todayISO(new Date(k.mtime * 1000)))}</span>
+        <span class="chip">${(k.size / 1024).toFixed(1)} КБ</span>
+      </div>
+    </button>`).join('')}</div>` : '<p class="hint">У Майка пока пусто.</p>') : ''}
+  ${!list ? '<p class="hint">Живут на сервере Майка (konspekty/). Кнопка подтянет свежий список.</p>' : ''}`;
 }
 
 /* ---------- SEO-пайплайн ---------- */
@@ -563,51 +599,79 @@ function viewSeo() {
     : `<div class="empty"><span class="empty-emoji">◈</span><p>Адрес не задан. Вставьте ссылку выше — страница появится в этом разделе.</p></div>`}`;
 }
 
-/* ---------- боты и Make ---------- */
+/* ---------- агенты ---------- */
 
-function viewBots() {
-  const s = state.settings;
+const EVENT_LABELS = {
+  ping: 'проверка связи', 'task.send': 'задача', 'note.send': 'конспект', errand: 'поручение',
+};
+
+/** Последний результат связи с агентом — из журнала, без отдельного состояния. */
+function agentStatus(id) {
+  const last = state.outbox.find((e) => e.agentId === id && e.status !== 'pending');
+  return last ? last.status : null;
+}
+
+function viewAgents() {
+  const m = mike();
+  const others = agents().filter((a) => a.kind !== 'mike');
   const log = state.outbox.slice(0, 15);
+  const st = agentStatus('mike');
+  const dot = st === 'ok' ? '<span class="dot is-ok"></span>на связи'
+    : st === 'error' ? '<span class="dot is-err"></span>ошибка — см. журнал'
+    : '<span class="dot"></span>связь не проверялась';
+
   return `
-  <div class="card" style="margin-bottom:18px">
-    <h3>Куда отправлять</h3>
-    <p>Админка статическая, поэтому наружу она ходит одним способом — POST-запросом на вебхук. Подойдёт Custom webhook в Make, n8n или любой свой обработчик.</p>
-    <div class="field" style="margin-top:12px"><label>URL вебхука</label>
-      <input data-edit="webhook-url" value="${esc(s.webhookUrl)}" placeholder="https://hook.eu2.make.com/..."></div>
-    <div class="field" style="margin-top:10px"><label>Токен (уйдёт в теле запроса)</label>
-      <input data-edit="webhook-token" value="${esc(s.webhookToken)}" placeholder="необязательно"></div>
+  <div class="card is-main-agent" style="margin-bottom:18px">
+    <h3>Майк — главный агент <span class="agent-status">${dot}</span></h3>
+    <p>Hermes-агент на этом же сервере, круглосуточно на связи в Telegram. Пульт говорит с ним напрямую — задачи, конспекты и поручения уходят ему, ответ приходит в журнал ниже.</p>
+    <div class="field" style="margin-top:12px"><label>Токен моста</label>
+      <input type="password" data-edit="agent-token" data-id="mike" value="${esc(m.token)}"
+             placeholder="pult-… — лежит на сервере в /root/.hermes/pult-token.txt" autocomplete="off"></div>
     <div class="card-foot">
-      <button class="btn btn-sm btn-primary" data-action="ping">Проверить связь</button>
-      <span class="hint">Тело: <code>{ event, token, payload }</code>, Content-Type: text/plain — чтобы обойти CORS-preflight.</span>
+      <button class="btn btn-sm btn-primary" data-action="ping" data-id="mike">Проверить связь</button>
+      <span class="hint">Потоки: задача → Майку · конспект → Майку · поручение · задачи из его TODO.md · его конспекты — в разделе «Конспекты»</span>
     </div>
   </div>
 
+  ${m.token.trim() ? `
   <div class="card" style="margin-bottom:18px">
-    <h3>Создать ботика</h3>
-    <p>Форма отправит сценарию задание и заведёт строку в «Ожидание», чтобы запрос не потерялся.</p>
-    <div class="field" style="margin-top:12px"><label>Название</label>
-      <input id="bot-name" placeholder="Бот-квалификатор лидов"></div>
-    <div class="field" style="margin-top:10px"><label>Задача бота</label>
-      <textarea id="bot-brief" rows="4" placeholder="Что делает, на каких данных, куда пишет результат"></textarea></div>
-    <div class="field-row" style="margin-top:10px">
-      <div class="field"><label>Канал</label>
-        <select id="bot-channel"><option>Telegram</option><option>WhatsApp</option><option>Web-виджет</option><option>Внутренний</option></select></div>
-      <div class="field"><label>Модель</label>
-        <select id="bot-model"><option>claude-sonnet-5</option><option>claude-opus-5</option><option>claude-haiku-4-5</option></select></div>
-    </div>
-    <div class="card-foot"><button class="btn btn-primary" data-action="create-bot">Отправить в Make</button></div>
-  </div>
+    <h3>Поручить Майку</h3>
+    <p>Свободный текст — Майк возьмёт в работу и ответит в Telegram. Здесь появится строка в «Ожидании», чтобы поручение не потерялось.</p>
+    <div class="field" style="margin-top:12px">
+      <textarea id="errand-text" rows="3" placeholder="Например: собери сводку по упоминаниям crmgroup за неделю и пришли в Telegram"></textarea></div>
+    <div class="card-foot"><button class="btn btn-primary" data-action="send-errand">⚡ Отправить Майку</button></div>
+  </div>` : ''}
 
-  <div class="section-head"><h2>Журнал отправок</h2><span class="count">${state.outbox.length}</span></div>
+  <div class="section-head"><h2>Другие агенты</h2><span class="count">${others.length}</span><span class="spacer"></span>
+    <button class="btn btn-sm" data-action="agent-add">+ Агент</button></div>
+  ${others.length ? others.map((a) => `
+    <div class="card" style="margin-bottom:12px">
+      <div class="field-row">
+        <div class="field"><label>Название</label>
+          <input data-edit="agent-name" data-id="${a.id}" value="${esc(a.name)}"></div>
+        <div class="field"><label>URL вебхука</label>
+          <input data-edit="agent-url" data-id="${a.id}" value="${esc(a.url)}" placeholder="https://…"></div>
+      </div>
+      <div class="field" style="margin-top:10px"><label>Токен (уйдёт в теле запроса)</label>
+        <input type="password" data-edit="agent-token" data-id="${a.id}" value="${esc(a.token)}" placeholder="необязательно" autocomplete="off"></div>
+      <div class="card-foot">
+        <button class="btn btn-sm" data-action="ping" data-id="${a.id}">Проверить связь</button>
+        <span class="spacer"></span>
+        <button class="btn btn-sm btn-ghost btn-danger" data-action="agent-del" data-id="${a.id}">Удалить</button>
+      </div>
+    </div>`).join('')
+    : '<p class="hint" style="margin-bottom:18px">Кроме Майка пока никого. Агент — это любой вебхук (n8n, свой обработчик): пульт шлёт ему POST <code>{ event, token, payload }</code>.</p>'}
+
+  <div class="section-head"><h2>Журнал</h2><span class="count">${state.outbox.length}</span></div>
   ${log.length ? `<div class="rows">${log.map((e) => `
     <div class="row" style="cursor:default">
       <span class="check" style="border:0;color:${e.status === 'ok' ? 'var(--ok)' : e.status === 'error' ? 'var(--danger)' : 'var(--faint)'}">
         ${e.status === 'ok' ? '✓' : e.status === 'error' ? '✕' : '·'}</span>
       <div class="row-body">
-        <div class="row-title">${esc(e.event)}</div>
+        <div class="row-title">${esc(EVENT_LABELS[e.event] || e.event)}${e.agentName ? ` → ${esc(e.agentName)}` : ''}</div>
         <div class="row-meta">
           <span class="chip">${new Date(e.at).toLocaleString('ru-RU')}</span>
-          ${e.response ? `<span class="chip ${e.status === 'error' ? 'is-stale' : ''}">${esc(e.response.slice(0, 80))}</span>` : ''}
+          ${e.response ? `<span class="chip ${e.status === 'error' ? 'is-stale' : ''}">${esc(e.response.slice(0, 120))}</span>` : ''}
         </div>
       </div>
     </div>`).join('')}</div>`
@@ -648,6 +712,7 @@ function viewSettings() {
       <button class="btn btn-sm btn-primary" data-action="md-import">Влить в пульт</button>
       <button class="btn btn-sm" data-action="md-export">↓ Скачать todo.md</button>
       <button class="btn btn-sm btn-ghost" data-action="md-preview">Показать текущий</button>
+      ${mike()?.token.trim() ? '<button class="btn btn-sm" data-action="mike-pull-todo">← Задачи от Майка</button>' : ''}
     </div>
   </div>
 
@@ -686,7 +751,7 @@ function renderView() {
     case 'goals': return viewGoals();
     case 'notes': return viewNotes();
     case 'seo': return viewSeo();
-    case 'bots': return viewBots();
+    case 'agents': return viewAgents();
     case 'settings': return viewSettings();
     case 'more': return viewMore();
     default: return viewList(ui.route);
@@ -749,7 +814,8 @@ function taskDetail(id) {
 
     <div class="divider" style="margin:6px 0"></div>
     <button class="btn" data-action="to-project" data-id="${id}">▦ Превратить в проект</button>
-    <button class="btn" data-action="send-task" data-id="${id}">⚡ Отправить в Make</button>
+    ${readyAgents().map((a) => `
+      <button class="btn" data-action="send-task" data-id="${id}" data-agent="${a.id}">⚡ Отправить ${a.kind === 'mike' ? 'Майку' : esc(a.name)}</button>`).join('')}
 
     <div class="detail-foot">
       <button class="btn btn-danger" data-action="del-task" data-id="${id}">Удалить</button>
@@ -916,9 +982,19 @@ const ACTIONS = {
   timer() {
     const started = state.topGoal.timerStartedAt;
     if (started) {
-      const mins = Math.max(1, Math.round((Date.now() - new Date(started).getTime()) / 60000));
+      const start = new Date(started);
+      const mins = Math.max(1, Math.round((Date.now() - start.getTime()) / 60000));
       commit((s) => { s.topGoal.timerStartedAt = null; });
-      logTopGoal(mins);
+      const startDay = todayISO(start);
+      if (startDay === todayISO()) {
+        logTopGoal(mins);
+      } else {
+        // сессия перевалила полночь: до полуночи — в день старта, остаток — в сегодня
+        const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+        const before = Math.max(0, Math.round((midnight - start) / 60000));
+        if (before) logTopGoal(before, startDay);
+        logTopGoal(Math.max(1, mins - before));
+      }
     } else {
       commit((s) => { s.topGoal.timerStartedAt = new Date().toISOString(); });
     }
@@ -1000,28 +1076,81 @@ const ACTIONS = {
     alert(`Создано действий: ${parsed.length}`);
   },
 
-  async ping() { await sendToWebhook('ping', { from: 'pult', at: new Date().toISOString() }); },
-  async 'create-bot'() {
-    const name = $('#bot-name')?.value.trim();
-    if (!name) { alert('Укажите название бота'); return; }
-    const payload = {
-      name,
-      brief: $('#bot-brief')?.value.trim() || '',
-      channel: $('#bot-channel')?.value,
-      model: $('#bot-model')?.value,
-      requestedAt: new Date().toISOString(),
-      requestId: uid(),
-    };
-    const entry = await sendToWebhook('bot.create', payload);
+  async ping(el) {
+    const a = agents().find((x) => x.id === el.dataset.id);
+    if (a) await sendToAgent(a, 'ping', { from: 'pult', at: new Date().toISOString() });
+  },
+  'agent-add': () => addAgent(),
+  'agent-del': (el) => {
+    if (!confirm('Удалить агента? Журнал отправок останется.')) return;
+    removeAgent(el.dataset.id);
+  },
+  async 'send-errand'() {
+    const text = $('#errand-text')?.value.trim();
+    if (!text) { alert('Напишите, что поручаете'); return; }
+    const m = mike();
     addTask({
-      title: `Ботик «${name}» — ждём сборку`,
-      list: 'waiting', person: 'Make', note: JSON.stringify(payload, null, 2),
+      title: `Поручение Майку: ${text.slice(0, 60)}${text.length > 60 ? '…' : ''}`,
+      list: 'waiting', person: 'Майк', note: text,
     });
-    if (entry.status === 'error') alert('Отправить не удалось: ' + entry.response + '\nЗадача в «Ожидании» всё равно создана.');
+    $('#errand-text').value = '';
+    const entry = await sendToAgent(m, 'errand', { text });
+    if (entry.status === 'error') alert('Отправить не удалось: ' + entry.response + '\nСтрока в «Ожидании» всё равно создана.');
   },
   async 'send-task'(el) {
+    const a = agents().find((x) => x.id === el.dataset.agent);
     const t = state.tasks.find((x) => x.id === el.dataset.id);
-    if (t) await sendToWebhook('task.send', t);
+    if (!a || !t) return;
+    const entry = await sendToAgent(a, 'task.send', a.kind === 'mike'
+      ? { title: t.title, note: t.note, due: t.due, person: t.person,
+          minutes: t.minutes, projectTitle: projectTitle(t.projectId) || '' }
+      : t);
+    alert(entry.status === 'ok'
+      ? `Ушло. Ответ: ${entry.response || 'ок'}`
+      : 'Не ушло: ' + entry.response);
+  },
+  async 'send-note'(el) {
+    const n = state.notes.find((x) => x.id === el.dataset.id);
+    if (!n) return;
+    const entry = await sendToAgent(mike(), 'note.send',
+      { title: n.title, person: n.person, date: n.date, body: n.body });
+    alert(entry.status === 'ok'
+      ? `Конспект у Майка. Ответ: ${entry.response || 'ок'}`
+      : 'Не ушло: ' + entry.response);
+  },
+  async 'mike-load-notes'() {
+    ui.mikeIndex = 'loading'; render();
+    try {
+      ui.mikeIndex = JSON.parse(await mikeFetch('konspekty/index.json'));
+    } catch (e) {
+      ui.mikeIndex = { error: String(e.message || e) };
+    }
+    render();
+  },
+  async 'mike-open-note'(el) {
+    try {
+      ui.mikeNote = { file: el.dataset.file, text: await mikeFetch('konspekty/' + el.dataset.file) };
+      render();
+    } catch (e) { alert(String(e.message || e)); }
+  },
+  'mike-close-note': () => { ui.mikeNote = null; render(); },
+  async 'mike-pull-todo'() {
+    try {
+      const parsed = fromMarkdown(await mikeFetch('TODO.md'))
+        .filter((t) => !t.done); // выполненное у Майка не тащим — его история, не наша
+      let added = 0, skipped = 0;
+      parsed.forEach((t) => {
+        if (state.tasks.some((x) => sameTask(x, t.title))) { skipped++; return; }
+        addTask({
+          title: t.title, list: t.list === 'done' ? 'next' : t.list, context: t.context,
+          projectId: t.projectName ? findOrCreateProject(t.projectName).id : null,
+          person: t.person, due: t.due, minutes: t.minutes, topGoal: t.topGoal,
+        });
+        added++;
+      });
+      alert(`TODO.md Майка: добавлено ${added}, уже было ${skipped}.`);
+      render();
+    } catch (e) { alert(String(e.message || e)); }
   },
 
   theme() {
@@ -1049,7 +1178,9 @@ const ACTIONS = {
         title: t.title, list: t.list, context: t.context,
         projectId: t.projectName ? findOrCreateProject(t.projectName).id : null,
         person: t.person, due: t.due, minutes: t.minutes, topGoal: t.topGoal,
-        doneAt: t.done ? new Date().toISOString() : null,
+        // выполненным при импорте doneAt не ставим: дата закрытия неизвестна,
+        // а «сейчас» раздуло бы счётчик «Закрыто за 7 дней»
+        doneAt: null,
       });
       added++;
     });
@@ -1096,8 +1227,9 @@ const EDITS = {
   'note-date': (id, v) => commit((s) => { const n = s.notes.find((x) => x.id === id); if (n) n.date = v; }),
   'note-project': (id, v) => commit((s) => { const n = s.notes.find((x) => x.id === id); if (n) n.projectId = v || null; }),
   'note-body': (id, v) => commit((s) => { const n = s.notes.find((x) => x.id === id); if (n) n.body = v; }),
-  'webhook-url': (_, v) => commit((s) => { s.settings.webhookUrl = v; }),
-  'webhook-token': (_, v) => commit((s) => { s.settings.webhookToken = v; }),
+  'agent-name': (id, v) => commit((s) => { const a = s.settings.agents.find((x) => x.id === id); if (a) a.name = v; }),
+  'agent-url': (id, v) => commit((s) => { const a = s.settings.agents.find((x) => x.id === id); if (a) a.url = v; }),
+  'agent-token': (id, v) => commit((s) => { const a = s.settings.agents.find((x) => x.id === id); if (a) a.token = v; }),
   'seo-url': (_, v) => commit((s) => { s.settings.seoUrl = v; }),
 };
 
@@ -1191,10 +1323,11 @@ const ROUTES = new Set([...NAV.flatMap((g) => g.items.map(([r]) => r)), 'more'])
 function route() {
   // при переходе в другой раздел фокус не должен оставаться в поле захвата
   document.activeElement?.blur?.();
-  const r = location.hash.replace(/^#\/?/, '') || 'dashboard';
+  let r = location.hash.replace(/^#\/?/, '') || 'dashboard';
+  if (r === 'bots') r = 'agents'; // старые закладки на «Боты и Make»
   ui.route = ROUTES.has(r) ? r : 'dashboard';
   ui.selected = null;
-  if (ui.route !== 'notes') ui.openNote = null;
+  if (ui.route !== 'notes') { ui.openNote = null; ui.mikeNote = null; }
   render();
   window.scrollTo(0, 0);
   const m = $('.main'); if (m) m.scrollTop = 0;
