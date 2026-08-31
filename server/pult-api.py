@@ -447,7 +447,9 @@ def _sync_notes_inner(db):
                 fname = f"{date}-{slugify(r['title'], r['id'])}-{n}.md"
                 path = os.path.join(KONSPEKTY_DIR, fname)
                 n += 1
-            if not body.lstrip().startswith("#") and (r["title"] or "").strip():
+            # заголовок дописываем, если в тексте нет своего H1: «## Итог»
+            # в начале — это раздел, а не название конспекта
+            if not re.match(r"#\s+\S", body.lstrip()) and (r["title"] or "").strip():
                 body = f"# {r['title']}\n\n{body}"
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
